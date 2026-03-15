@@ -291,7 +291,22 @@ Kirigami.ApplicationWindow {
 
     WorkspaceCreateSheet {
         id: createSheet
-        onAccepted: WorkspaceModel.refresh()
+        onAccepted: {
+            // Find and select the newly created workspace
+            let ws = WorkspaceModel.getById(WorkspaceModel.lastAddedId);
+            if (ws && ws.id) {
+                selectedWorkspaceId = ws.id;
+                selectedWorkspaceName = ws.name;
+                workspaceLoader.setSource(Qt.resolvedUrl("WorkspacePage.qml"), {
+                    workspaceId: ws.id,
+                    workspaceName: ws.name,
+                    worktreePath: ws.worktreePath,
+                    branchName: ws.branchName,
+                    sourceBranch: ws.sourceBranch,
+                    repoPath: ws.repoPath
+                });
+            }
+        }
     }
 
     FolderDialog {

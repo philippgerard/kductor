@@ -9,6 +9,7 @@ class WorkspaceModel : public QAbstractListModel
 {
     Q_OBJECT
     Q_PROPERTY(int count READ count NOTIFY countChanged)
+    Q_PROPERTY(QString lastAddedId READ lastAddedId NOTIFY countChanged)
 
 public:
     enum Roles {
@@ -31,6 +32,7 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     int count() const { return m_workspaces.size(); }
+    QString lastAddedId() const { return m_lastAddedId; }
 
     Q_INVOKABLE void refresh();
     Q_INVOKABLE QVariantMap get(int index) const;
@@ -49,6 +51,7 @@ Q_SIGNALS:
 
 private:
     QList<Workspace> m_workspaces;
+    QString m_lastAddedId;
     QStringList m_standaloneRepos;
     WorkspaceStore m_store;
     WorktreeManager *m_worktreeManager;

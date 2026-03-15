@@ -199,6 +199,7 @@ void WorkspaceModel::addWorkspace(const Workspace &ws)
     beginInsertRows(QModelIndex(), m_workspaces.size(), m_workspaces.size());
     m_workspaces.append(ws);
     m_store.addWorkspace(ws);
+    m_lastAddedId = ws.id;
     endInsertRows();
     Q_EMIT countChanged();
 }
