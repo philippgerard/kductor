@@ -257,12 +257,17 @@ Kirigami.ApplicationWindow {
                     visible: !workspaceLoader.item
                     width: parent.width - Kirigami.Units.largeSpacing * 4
                     icon.name: "kductor"
-                    text: i18n("No workspace selected")
-                    explanation: i18n("Select a workspace from the sidebar or create a new one.")
+                    text: sidebarContent.repos.length === 0
+                        ? i18n("Get started")
+                        : i18n("No workspace selected")
+                    explanation: sidebarContent.repos.length === 0
+                        ? i18n("Add a Git repository to start orchestrating AI agents.")
+                        : i18n("Select a workspace from the sidebar or add one with the + button.")
                     helpfulAction: Kirigami.Action {
-                        text: i18n("New Workspace")
+                        text: sidebarContent.repos.length === 0 ? i18n("Add Repository") : ""
                         icon.name: "list-add-symbolic"
-                        onTriggered: createSheet.open()
+                        visible: sidebarContent.repos.length === 0
+                        onTriggered: addRepoDialog.open()
                     }
                 }
 

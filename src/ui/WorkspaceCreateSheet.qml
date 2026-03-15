@@ -7,7 +7,7 @@ import org.kde.kductor
 Kirigami.Dialog {
     id: createDialog
 
-    title: i18n("New Workspace")
+    title: selectedRepo ? i18n("New Workspace — %1", selectedRepo.split("/").pop()) : i18n("New Workspace")
     preferredWidth: Kirigami.Units.gridUnit * 22
 
     signal accepted()
