@@ -350,11 +350,28 @@ Kirigami.Page {
         ]
     }
 
-    Kirigami.PromptDialog {
+    Kirigami.Dialog {
         id: archiveDialog
         title: i18n("Archive Workspace")
-        subtitle: i18n("Remove worktree and agent sessions? The branch '%1' will remain.", branchName)
+        preferredWidth: Kirigami.Units.gridUnit * 24
         standardButtons: Kirigami.Dialog.Cancel
+
+        ColumnLayout {
+            spacing: Kirigami.Units.largeSpacing
+
+            QQC2.Label {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                text: i18n("Remove worktree and agent sessions?")
+            }
+
+            QQC2.CheckBox {
+                id: deleteBranchCheck
+                text: i18n("Also delete branch '%1'", branchName)
+                checked: false
+            }
+        }
+
         customFooterActions: [
             Kirigami.Action {
                 text: i18n("Archive")
@@ -362,7 +379,7 @@ Kirigami.Page {
                 onTriggered: {
                     archiveDialog.close();
                     for (let a of agents) AgentManager.removeAgent(a.id);
-                    WorktreeManager.archiveWorkspace(worktreePath, repoPath);
+                    WorktreeManager.archiveWorkspace(worktreePath, repoPath, deleteBranchCheck.checked ? branchName : "");
                 }
             }
         ]

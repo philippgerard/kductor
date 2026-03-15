@@ -201,7 +201,7 @@ Item {
                     for (let ws of workspaces) {
                         let agents = AgentManager.agentsForWorkspace(ws.id);
                         for (let a of agents) AgentManager.removeAgent(a);
-                        WorktreeManager.archiveWorkspace(ws.worktreePath, ws.repoPath);
+                        WorktreeManager.archiveWorkspace(ws.worktreePath, ws.repoPath, ws.branchName);
                         WorkspaceModel.remove(ws.id);
                     }
                     WorkspaceModel.removeRepo(repoPath);

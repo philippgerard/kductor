@@ -194,13 +194,21 @@ void WorktreeManager::mergeToSource(const QString &repoPath, const QString &bran
              {QStringLiteral("-c"), findWt});
 }
 
-void WorktreeManager::archiveWorkspace(const QString &worktreePath, const QString &repoPath)
+void WorktreeManager::archiveWorkspace(const QString &worktreePath, const QString &repoPath,
+                                       const QString &deleteBranch)
 {
     QDir(worktreePath).removeRecursively();
 
-    runAsync(QStringLiteral("archive"), repoPath,
-             QStringLiteral("git"),
-             {QStringLiteral("worktree"), QStringLiteral("prune")});
+    if (!deleteBranch.isEmpty()) {
+        // Prune worktree then delete branch
+        QString script = QStringLiteral("git worktree prune && git branch -D '%1' 2>&1").arg(deleteBranch);
+        runAsync(QStringLiteral("archive"), repoPath,
+                 QStringLiteral("bash"), {QStringLiteral("-c"), script});
+    } else {
+        runAsync(QStringLiteral("archive"), repoPath,
+                 QStringLiteral("git"),
+                 {QStringLiteral("worktree"), QStringLiteral("prune")});
+    }
 }
 
 bool WorktreeManager::hasRemote(const QString &worktreePath) const
