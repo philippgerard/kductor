@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component type="desktop-application">
+  <id>org.kde.kductor</id>
+  <name>Kductor</name>
+  <summary>AI Agent Orchestrator</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="com.philippgerard">
+    <name>Philipp Gerard</name>
+  </developer>
+  <description>
+    <p>
+      Kductor is a KDE-native desktop application for orchestrating multiple
+      Claude Code AI agents working in parallel across isolated git worktrees.
+    </p>
+    <p>Features include:</p>
+    <ul>
+      <li>Spawn multiple Claude Code agents per workspace</li>
+      <li>Real-time streaming output with markdown rendering</li>
+      <li>Built-in diff viewer with All/Committed/Pending modes</li>
+      <li>Push, create PRs, and merge — GitHub and Gitea supported</li>
+      <li>System tray with live agent status and notifications</li>
+      <li>Persistent sessions and conversation history across restarts</li>
+    </ul>
+  </description>
+  <url type="homepage">https://github.com/philippgerard/kductor</url>
+  <url type="bugtracker">https://github.com/philippgerard/kductor/issues</url>
+  <url type="vcs-browser">https://github.com/philippgerard/kductor</url>
+  <launchable type="desktop-id">org.kde.kductor.desktop</launchable>
+  <provides>
+    <binary>kductor</binary>
+  </provides>
+  <content_rating type="oars-1.1" />
+  <categories>
+    <category>Development</category>
+    <category>IDE</category>
+  </categories>
+  <requires>
+    <internet>always</internet>
+  </requires>
+  <releases>
+    <release version="0.1.0" date="2026-03-15">
+      <description>
+        <p>Initial release with full agent orchestration, diff viewer, PR workflow, and KDE integration.</p>
+      </description>
+    </release>
+  </releases>
+</component>

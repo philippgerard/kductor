@@ -56,6 +56,7 @@ ecm_find_qmlmodule(org.kde.kirigamiaddons.formcard REQUIRED)
 add_subdirectory(src)
 
 install(PROGRAMS org.kde.kductor.desktop DESTINATION ${KDE_INSTALL_APPDIR})
+install(FILES org.kde.kductor.metainfo.xml DESTINATION ${KDE_INSTALL_METAINFODIR})
 install(FILES org.kde.kductor.notifyrc DESTINATION ${KDE_INSTALL_KNOTIFYRCDIR})
 install(FILES icons/kductor.svg DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps)
 install(FILES icons/kductor-dark.svg DESTINATION ${KDE_INSTALL_ICONDIR}/breeze-dark/apps/48 RENAME kductor.svg)

@@ -1,2 +1,10 @@
 build/
 .cache/
+.qt/
+CMakeLists.txt.user
+*.autosave
+*.orig
+.idea/
+.vscode/
+*.swp
+*~
