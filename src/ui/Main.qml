@@ -16,6 +16,31 @@ Kirigami.ApplicationWindow {
     property string selectedWorkspaceId: ""
     property string selectedWorkspaceName: ""
 
+    onClosing: function(close) {
+        if (AgentManager.activeCount > 0) {
+            close.accepted = false;
+            quitDialog.open();
+        }
+    }
+
+    Kirigami.PromptDialog {
+        id: quitDialog
+        title: i18n("Agents Running")
+        subtitle: i18np("%1 agent is still running. Quit anyway?", "%1 agents are still running. Quit anyway?", AgentManager.activeCount)
+        standardButtons: Kirigami.Dialog.Cancel
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Stop & Quit")
+                icon.name: "application-exit"
+                onTriggered: {
+                    quitDialog.close();
+                    AgentManager.stopAll();
+                    Qt.quit();
+                }
+            }
+        ]
+    }
+
     globalDrawer: Kirigami.GlobalDrawer {
         title: i18n("Kductor")
         titleIcon: "kductor"
