@@ -142,18 +142,24 @@ Kirigami.ApplicationWindow {
 
                                         // Status dot
                                         Rectangle {
+                                            id: statusDot
                                             width: Kirigami.Units.smallSpacing * 2
                                             height: width
                                             radius: width / 2
+
+                                            readonly property bool hasAgents: AgentManager.activeCount >= 0 && AgentManager.agentsForWorkspace(wsDelegate.workspaceId).length > 0
+                                            readonly property bool agentsRunning: AgentManager.activeCount >= 0 && AgentManager.workspaceAgentStatus(wsDelegate.workspaceId) === 2
+
                                             color: {
-                                                let running = AgentManager.activeCount >= 0 && AgentManager.workspaceAgentStatus(wsDelegate.workspaceId) === 2;
-                                                if (running) return Kirigami.Theme.focusColor;
+                                                if (agentsRunning) return Kirigami.Theme.focusColor;
+                                                if (hasAgents) return Kirigami.Theme.positiveTextColor;
                                                 if (wsDelegate.status === 2) return Kirigami.Theme.disabledTextColor;
-                                                return Kirigami.Theme.positiveTextColor;
+                                                return Kirigami.Theme.disabledTextColor;
                                             }
+                                            opacity: (!hasAgents && wsDelegate.status !== 2) ? 0.4 : 1.0
 
                                             SequentialAnimation on opacity {
-                                                running: AgentManager.activeCount >= 0 && AgentManager.workspaceAgentStatus(wsDelegate.workspaceId) === 2
+                                                running: statusDot.agentsRunning
                                                 loops: Animation.Infinite
                                                 NumberAnimation { to: 0.3; duration: 800; easing.type: Easing.InOutQuad }
                                                 NumberAnimation { to: 1.0; duration: 800; easing.type: Easing.InOutQuad }
