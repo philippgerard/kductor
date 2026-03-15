@@ -160,13 +160,57 @@ Item {
             }
         }
 
-        // New workspace button
-        QQC2.Button {
-            icon.name: "list-add-symbolic"
-            text: i18n("New Workspace")
-            onClicked: createSheet.openForRepo(repoPath)
+        // Actions
+        RowLayout {
+            spacing: Kirigami.Units.largeSpacing
+
+            QQC2.Button {
+                icon.name: "list-add-symbolic"
+                text: i18n("New Workspace")
+                onClicked: createSheet.openForRepo(repoPath)
+            }
+
+            Item { Layout.fillWidth: true }
+
+            QQC2.Button {
+                icon.name: "edit-delete-symbolic"
+                text: i18n("Remove Repository")
+                flat: true
+                opacity: 0.6
+                onClicked: removeRepoDialog.open()
+            }
         }
 
         Item { Layout.fillHeight: true }
+    }
+
+    Kirigami.PromptDialog {
+        id: removeRepoDialog
+        title: i18n("Remove Repository")
+        subtitle: workspaces.length > 0
+            ? i18n("This repo has %1 workspace(s). Archive them first, or remove the repo and all its workspaces?", workspaces.length)
+            : i18n("Remove '%1' from the sidebar?", repoName)
+        standardButtons: Kirigami.Dialog.Cancel
+        customFooterActions: [
+            Kirigami.Action {
+                text: workspaces.length > 0 ? i18n("Remove All") : i18n("Remove")
+                icon.name: "edit-delete-symbolic"
+                onTriggered: {
+                    removeRepoDialog.close();
+                    // Archive all workspaces for this repo
+                    for (let ws of workspaces) {
+                        let agents = AgentManager.agentsForWorkspace(ws.id);
+                        for (let a of agents) AgentManager.removeAgent(a);
+                        WorktreeManager.archiveWorkspace(ws.worktreePath, ws.repoPath);
+                        WorkspaceModel.remove(ws.id);
+                    }
+                    WorkspaceModel.removeRepo(repoPath);
+                    applicationWindow().selectedWorkspaceId = "";
+                    applicationWindow().selectedWorkspaceName = "";
+                    // Clear the loader
+                    workspaceLoader.source = "";
+                }
+            }
+        ]
     }
 }
