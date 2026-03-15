@@ -98,10 +98,13 @@ void WorkspaceModel::remove(const QString &id)
 {
     for (int i = 0; i < m_workspaces.size(); ++i) {
         if (m_workspaces[i].id == id) {
+            QString repo = m_workspaces[i].repoPath;
             beginRemoveRows(QModelIndex(), i, i);
             m_workspaces.removeAt(i);
             m_store.removeWorkspace(id);
             endRemoveRows();
+            // Keep the repo in sidebar if this was the last workspace
+            addRepo(repo);
             Q_EMIT countChanged();
             return;
         }
