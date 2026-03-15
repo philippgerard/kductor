@@ -8,11 +8,19 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSettings>
 #include <QStandardPaths>
 
 AgentManager::AgentManager(QObject *parent)
     : QObject(parent)
 {
+    // Load settings
+    QSettings settings;
+    m_maxConcurrentAgents = settings.value(QStringLiteral("maxConcurrentAgents"), 8).toInt();
+    m_defaultModel = settings.value(QStringLiteral("defaultModel"), QStringLiteral("opus")).toString();
+    m_showInTray = settings.value(QStringLiteral("showInTray"), true).toBool();
+    m_notifyOnComplete = settings.value(QStringLiteral("notifyOnComplete"), true).toBool();
+
     detectClaude();
     loadAgents();
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, &AgentManager::saveAgents);
@@ -233,7 +241,35 @@ void AgentManager::setMaxConcurrentAgents(int max)
 {
     if (m_maxConcurrentAgents != max) {
         m_maxConcurrentAgents = max;
+        QSettings().setValue(QStringLiteral("maxConcurrentAgents"), max);
         Q_EMIT maxConcurrentAgentsChanged();
+    }
+}
+
+void AgentManager::setDefaultModel(const QString &model)
+{
+    if (m_defaultModel != model) {
+        m_defaultModel = model;
+        QSettings().setValue(QStringLiteral("defaultModel"), model);
+        Q_EMIT defaultModelChanged();
+    }
+}
+
+void AgentManager::setShowInTray(bool show)
+{
+    if (m_showInTray != show) {
+        m_showInTray = show;
+        QSettings().setValue(QStringLiteral("showInTray"), show);
+        Q_EMIT showInTrayChanged();
+    }
+}
+
+void AgentManager::setNotifyOnComplete(bool notify)
+{
+    if (m_notifyOnComplete != notify) {
+        m_notifyOnComplete = notify;
+        QSettings().setValue(QStringLiteral("notifyOnComplete"), notify);
+        Q_EMIT notifyOnCompleteChanged();
     }
 }
 

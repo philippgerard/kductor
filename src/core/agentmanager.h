@@ -13,6 +13,9 @@ class AgentManager : public QObject
     Q_PROPERTY(int activeCount READ activeCount NOTIFY activeCountChanged)
     Q_PROPERTY(int maxConcurrentAgents READ maxConcurrentAgents WRITE setMaxConcurrentAgents NOTIFY maxConcurrentAgentsChanged)
     Q_PROPERTY(bool claudeAvailable READ claudeAvailable CONSTANT)
+    Q_PROPERTY(QString defaultModel READ defaultModel WRITE setDefaultModel NOTIFY defaultModelChanged)
+    Q_PROPERTY(bool showInTray READ showInTray WRITE setShowInTray NOTIFY showInTrayChanged)
+    Q_PROPERTY(bool notifyOnComplete READ notifyOnComplete WRITE setNotifyOnComplete NOTIFY notifyOnCompleteChanged)
 
 public:
     explicit AgentManager(QObject *parent = nullptr);
@@ -41,9 +44,21 @@ public:
     int maxConcurrentAgents() const { return m_maxConcurrentAgents; }
     void setMaxConcurrentAgents(int max);
 
+    QString defaultModel() const { return m_defaultModel; }
+    void setDefaultModel(const QString &model);
+
+    bool showInTray() const { return m_showInTray; }
+    void setShowInTray(bool show);
+
+    bool notifyOnComplete() const { return m_notifyOnComplete; }
+    void setNotifyOnComplete(bool notify);
+
 Q_SIGNALS:
     void activeCountChanged();
     void maxConcurrentAgentsChanged();
+    void defaultModelChanged();
+    void showInTrayChanged();
+    void notifyOnCompleteChanged();
     void agentSpawned(const QString &agentId, const QString &workspaceId);
     void agentFinished(const QString &agentId);
     void agentError(const QString &agentId, const QString &error);
@@ -61,6 +76,9 @@ private:
     int m_maxConcurrentAgents = 8;
     bool m_claudeAvailable = false;
     QString m_claudePath;
+    QString m_defaultModel = QStringLiteral("opus");
+    bool m_showInTray = true;
+    bool m_notifyOnComplete = true;
 
     void connectAgent(const QString &agentId, AgentProcess *agent);
     void detectClaude();

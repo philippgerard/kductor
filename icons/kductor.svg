@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <!-- Orchestration lines -->
+  <line x1="24" y1="16" x2="12" y2="32" stroke="#3daee9" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+  <line x1="24" y1="16" x2="24" y2="36" stroke="#3daee9" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+  <line x1="24" y1="16" x2="36" y2="32" stroke="#3daee9" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+  <!-- Central node (conductor) -->
+  <circle cx="24" cy="14" r="6" fill="#3daee9"/>
+  <path d="M21 13l3-3 3 3M21 15l3 3 3-3" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Agent nodes -->
+  <circle cx="12" cy="34" r="5" fill="#27ae60"/>
+  <rect x="9.5" y="32" width="5" height="4" rx="1" fill="white" opacity="0.9"/>
+  <circle cx="24" cy="38" r="5" fill="#27ae60"/>
+  <rect x="21.5" y="36" width="5" height="4" rx="1" fill="white" opacity="0.9"/>
+  <circle cx="36" cy="34" r="5" fill="#27ae60"/>
+  <rect x="33.5" y="32" width="5" height="4" rx="1" fill="white" opacity="0.9"/>
+</svg>

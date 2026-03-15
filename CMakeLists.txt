@@ -56,5 +56,7 @@ ecm_find_qmlmodule(org.kde.kirigamiaddons.formcard REQUIRED)
 add_subdirectory(src)
 
 install(PROGRAMS org.kde.kductor.desktop DESTINATION ${KDE_INSTALL_APPDIR})
+install(FILES org.kde.kductor.notifyrc DESTINATION ${KDE_INSTALL_KNOTIFYRCDIR})
+install(FILES icons/kductor.svg DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps)
 
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)

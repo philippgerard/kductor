@@ -1,0 +1,17 @@
+[Global]
+IconName=kductor
+DesktopEntry=org.kde.kductor
+Name=Kductor
+Comment=AI Agent Orchestrator
+
+[Event/agentCompleted]
+Name=Agent Completed
+Comment=An AI agent has finished its task
+Action=Popup
+Urgency=Normal
+
+[Event/agentError]
+Name=Agent Error
+Comment=An AI agent encountered an error
+Action=Popup
+Urgency=Critical

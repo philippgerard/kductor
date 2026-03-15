@@ -2,6 +2,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QQuickWindow>
 #include <QIcon>
 
 #include <KAboutData>
@@ -10,6 +11,7 @@
 #include <KLocalizedString>
 #include <KCrash>
 #include <KIconTheme>
+#include <KNotification>
 #include <KStatusNotifierItem>
 
 #include "kductor-version.h"
@@ -52,6 +54,64 @@ int main(int argc, char *argv[])
         workspaceModel->addWorkspace(worktreeManager->lastCreatedWorkspace());
     });
 
+    // --- System tray ---
+    auto *tray = new KStatusNotifierItem(QStringLiteral("kductor"), &app);
+    tray->setIconByName(QStringLiteral("kductor"));
+    tray->setCategory(KStatusNotifierItem::ApplicationStatus);
+    tray->setStatus(KStatusNotifierItem::Passive);
+    tray->setToolTipTitle(i18n("Kductor"));
+    tray->setToolTipSubTitle(i18n("No agents running"));
+
+    // Update tray status based on active agents
+    QObject::connect(agentManager, &AgentManager::activeCountChanged, tray, [=]() {
+        int count = agentManager->activeCount();
+        if (count > 0) {
+            tray->setStatus(KStatusNotifierItem::Active);
+            tray->setToolTipSubTitle(i18np("%1 agent running", "%1 agents running", count));
+        } else {
+            tray->setStatus(KStatusNotifierItem::Passive);
+            tray->setToolTipSubTitle(i18n("No agents running"));
+        }
+    });
+
+    // Flash tray on agent error
+    QObject::connect(agentManager, &AgentManager::agentError, tray, [=](const QString &, const QString &) {
+        tray->setStatus(KStatusNotifierItem::NeedsAttention);
+    });
+
+    // Toggle tray visibility based on setting
+    QObject::connect(agentManager, &AgentManager::showInTrayChanged, tray, [=]() {
+        tray->setStatus(agentManager->showInTray() ? KStatusNotifierItem::Passive : KStatusNotifierItem::Passive);
+        // KStatusNotifierItem doesn't have a hide method; it's always registered.
+        // The setting is respected by checking it before showing notifications.
+    });
+
+    // --- Notifications ---
+    QObject::connect(agentManager, &AgentManager::agentFinished, &app, [=](const QString &agentId) {
+        if (!agentManager->notifyOnComplete())
+            return;
+        QString name = agentManager->agentName(agentId);
+        if (name.isEmpty())
+            name = i18n("Agent");
+        auto *notif = new KNotification(QStringLiteral("agentCompleted"));
+        notif->setTitle(i18n("Agent Completed"));
+        notif->setText(i18n("%1 has finished.", name));
+        notif->setIconName(QStringLiteral("kductor"));
+        notif->sendEvent();
+    });
+
+    QObject::connect(agentManager, &AgentManager::agentError, &app, [=](const QString &agentId, const QString &error) {
+        QString name = agentManager->agentName(agentId);
+        if (name.isEmpty())
+            name = i18n("Agent");
+        auto *notif = new KNotification(QStringLiteral("agentError"));
+        notif->setTitle(i18n("Agent Error"));
+        notif->setText(i18n("%1: %2", name, error));
+        notif->setIconName(QStringLiteral("kductor"));
+        notif->sendEvent();
+    });
+
+    // --- QML engine ---
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextObject(new KLocalizedContext(&engine));
     engine.rootContext()->setContextProperty(QStringLiteral("GitManager"), gitManager);

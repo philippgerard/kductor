@@ -26,11 +26,21 @@ Kirigami.ApplicationWindow {
                 }
             },
             Kirigami.Action {
+                text: i18n("Settings")
+                icon.name: "configure"
+                onTriggered: pageStack.pushDialogLayer(settingsPage)
+            },
+            Kirigami.Action {
                 text: i18n("About Kductor")
                 icon.name: "help-about"
                 onTriggered: pageStack.pushDialogLayer(aboutPage)
             }
         ]
+    }
+
+    Component {
+        id: settingsPage
+        SettingsPage {}
     }
 
     Component {
