@@ -11,6 +11,7 @@ Kirigami.Page {
     required property string workspaceName
     required property string worktreePath
     required property string branchName
+    required property string sourceBranch
     required property string repoPath
 
     title: workspaceName
@@ -65,6 +66,18 @@ Kirigami.Page {
             text: i18n("Add Agent")
             icon.name: "list-add-symbolic"
             onTriggered: addAgent()
+        },
+        Kirigami.Action {
+            text: i18n("View Diff")
+            icon.name: "vcs-diff"
+            shortcut: "Ctrl+D"
+            onTriggered: {
+                applicationWindow().pageStack.push(Qt.resolvedUrl("DiffViewerPage.qml"), {
+                    worktreePath: workspacePage.worktreePath,
+                    sourceBranch: workspacePage.sourceBranch,
+                    workspaceName: workspacePage.workspaceName
+                });
+            }
         }
     ]
 

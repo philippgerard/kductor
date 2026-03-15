@@ -17,6 +17,7 @@ ecm_add_qml_module(kductor
         ui/WorkspacePage.qml
         ui/WorkspaceCreateSheet.qml
         ui/AgentPanel.qml
+        ui/DiffViewerPage.qml
         ui/AboutPage.qml
         ui/components/WorkspaceCard.qml
         ui/components/AgentStatusCard.qml

@@ -64,6 +64,7 @@ Kirigami.ScrollablePage {
                         workspaceName: wsData.name,
                         worktreePath: wsData.worktreePath,
                         branchName: wsData.branchName,
+                        sourceBranch: wsData.sourceBranch,
                         repoPath: wsData.repoPath
                     });
                 }

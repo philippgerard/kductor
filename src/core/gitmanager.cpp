@@ -271,6 +271,176 @@ QVariantList GitManager::getDiff() const
     return result;
 }
 
+// Callback payload for git_diff_foreach
+struct DiffCollector {
+    QVariantList files;
+    QVariantList currentHunks;
+    QVariantList currentLines;
+};
+
+static int diffFileCb(const git_diff_delta *delta, float, void *payload)
+{
+    auto *dc = static_cast<DiffCollector *>(payload);
+
+    // Flush previous file's last hunk
+    if (!dc->currentLines.isEmpty()) {
+        if (!dc->currentHunks.isEmpty()) {
+            QVariantMap lastHunk = dc->currentHunks.last().toMap();
+            lastHunk[QStringLiteral("lines")] = dc->currentLines;
+            dc->currentHunks.last() = lastHunk;
+        }
+        dc->currentLines.clear();
+    }
+
+    // Flush previous file
+    if (!dc->currentHunks.isEmpty() && !dc->files.isEmpty()) {
+        QVariantMap lastFile = dc->files.last().toMap();
+        lastFile[QStringLiteral("hunks")] = dc->currentHunks;
+        dc->files.last() = lastFile;
+    }
+    dc->currentHunks.clear();
+
+    QString statusLabel;
+    switch (delta->status) {
+    case GIT_DELTA_ADDED:      statusLabel = QStringLiteral("Added"); break;
+    case GIT_DELTA_DELETED:    statusLabel = QStringLiteral("Deleted"); break;
+    case GIT_DELTA_MODIFIED:   statusLabel = QStringLiteral("Modified"); break;
+    case GIT_DELTA_RENAMED:    statusLabel = QStringLiteral("Renamed"); break;
+    case GIT_DELTA_COPIED:     statusLabel = QStringLiteral("Copied"); break;
+    default:                   statusLabel = QStringLiteral("Changed"); break;
+    }
+
+    QVariantMap file;
+    file[QStringLiteral("oldPath")] = QString::fromUtf8(delta->old_file.path);
+    file[QStringLiteral("newPath")] = QString::fromUtf8(delta->new_file.path);
+    file[QStringLiteral("status")] = static_cast<int>(delta->status);
+    file[QStringLiteral("statusLabel")] = statusLabel;
+    file[QStringLiteral("hunks")] = QVariantList();
+    dc->files.append(file);
+
+    return 0;
+}
+
+static int diffHunkCb(const git_diff_delta *, const git_diff_hunk *hunk, void *payload)
+{
+    auto *dc = static_cast<DiffCollector *>(payload);
+
+    // Flush previous hunk's lines
+    if (!dc->currentLines.isEmpty() && !dc->currentHunks.isEmpty()) {
+        QVariantMap lastHunk = dc->currentHunks.last().toMap();
+        lastHunk[QStringLiteral("lines")] = dc->currentLines;
+        dc->currentHunks.last() = lastHunk;
+    }
+    dc->currentLines.clear();
+
+    QVariantMap h;
+    h[QStringLiteral("header")] = QString::fromUtf8(hunk->header, static_cast<int>(hunk->header_len)).trimmed();
+    h[QStringLiteral("oldStart")] = hunk->old_start;
+    h[QStringLiteral("oldCount")] = static_cast<int>(hunk->old_lines);
+    h[QStringLiteral("newStart")] = hunk->new_start;
+    h[QStringLiteral("newCount")] = static_cast<int>(hunk->new_lines);
+    h[QStringLiteral("lines")] = QVariantList();
+    dc->currentHunks.append(h);
+
+    return 0;
+}
+
+static int diffLineCb(const git_diff_delta *, const git_diff_hunk *, const git_diff_line *line, void *payload)
+{
+    auto *dc = static_cast<DiffCollector *>(payload);
+
+    QString type;
+    switch (line->origin) {
+    case GIT_DIFF_LINE_ADDITION:  type = QStringLiteral("add"); break;
+    case GIT_DIFF_LINE_DELETION:  type = QStringLiteral("del"); break;
+    case GIT_DIFF_LINE_CONTEXT:   type = QStringLiteral("ctx"); break;
+    default: return 0; // Skip file/hunk headers, binary notices
+    }
+
+    QVariantMap l;
+    l[QStringLiteral("type")] = type;
+    l[QStringLiteral("content")] = QString::fromUtf8(line->content, static_cast<int>(line->content_len)).chopped(
+        (line->content_len > 0 && line->content[line->content_len - 1] == '\n') ? 1 : 0);
+    l[QStringLiteral("oldLine")] = line->old_lineno;
+    l[QStringLiteral("newLine")] = line->new_lineno;
+    dc->currentLines.append(l);
+
+    return 0;
+}
+
+QVariantList GitManager::getDetailedDiff(const QString &worktreePath, const QString &sourceBranch) const
+{
+    // Open the worktree directory as its own repository
+    git_repository *wtRepo = nullptr;
+    if (git_repository_open(&wtRepo, worktreePath.toUtf8().constData()) < 0)
+        return {};
+
+    // Resolve the source branch to a tree (e.g., "main")
+    git_object *sourceObj = nullptr;
+    git_commit *sourceCommit = nullptr;
+    git_tree *sourceTree = nullptr;
+    bool haveSourceTree = false;
+
+    if (!sourceBranch.isEmpty()) {
+        if (git_revparse_single(&sourceObj, wtRepo, sourceBranch.toUtf8().constData()) == 0) {
+            if (git_commit_lookup(&sourceCommit, wtRepo, git_object_id(sourceObj)) == 0) {
+                if (git_commit_tree(&sourceTree, sourceCommit) == 0) {
+                    haveSourceTree = true;
+                }
+            }
+        }
+    }
+
+    git_diff *diff = nullptr;
+    git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
+    opts.flags = GIT_DIFF_INCLUDE_UNTRACKED;
+    opts.context_lines = 3;
+
+    int err;
+    if (haveSourceTree) {
+        // Diff source branch tree vs working directory (shows ALL changes)
+        err = git_diff_tree_to_workdir_with_index(&diff, wtRepo, sourceTree, &opts);
+    } else {
+        // Fallback: diff HEAD vs working directory
+        err = git_diff_index_to_workdir(&diff, wtRepo, nullptr, &opts);
+    }
+
+    // Cleanup source refs
+    if (sourceTree) git_tree_free(sourceTree);
+    if (sourceCommit) git_commit_free(sourceCommit);
+    if (sourceObj) git_object_free(sourceObj);
+
+    if (err < 0) {
+        git_repository_free(wtRepo);
+        return {};
+    }
+
+    // Detect renames
+    git_diff_find_options findOpts = GIT_DIFF_FIND_OPTIONS_INIT;
+    findOpts.flags = GIT_DIFF_FIND_RENAMES;
+    git_diff_find_similar(diff, &findOpts);
+
+    // Collect all data via callbacks
+    DiffCollector collector;
+    git_diff_foreach(diff, diffFileCb, nullptr, diffHunkCb, diffLineCb, &collector);
+
+    // Flush the last file's last hunk
+    if (!collector.currentLines.isEmpty() && !collector.currentHunks.isEmpty()) {
+        QVariantMap lastHunk = collector.currentHunks.last().toMap();
+        lastHunk[QStringLiteral("lines")] = collector.currentLines;
+        collector.currentHunks.last() = lastHunk;
+    }
+    if (!collector.currentHunks.isEmpty() && !collector.files.isEmpty()) {
+        QVariantMap lastFile = collector.files.last().toMap();
+        lastFile[QStringLiteral("hunks")] = collector.currentHunks;
+        collector.files.last() = lastFile;
+    }
+
+    git_diff_free(diff);
+    git_repository_free(wtRepo);
+    return collector.files;
+}
+
 void GitManager::setError(const QString &context)
 {
     const git_error *err = git_error_last();
