@@ -232,6 +232,19 @@ bool AgentManager::canStartAgent() const
     return m_claudeAvailable && activeCount() < m_maxConcurrentAgents;
 }
 
+int AgentManager::workspaceAgentStatus(const QString &workspaceId) const
+{
+    // Return 2 (Running) if any agent in this workspace is running/starting, else 0 (Idle)
+    for (auto it = m_agentToWorkspace.cbegin(); it != m_agentToWorkspace.cend(); ++it) {
+        if (it.value() == workspaceId) {
+            auto *agent = m_agents.value(it.key());
+            if (agent && (agent->status() == AgentProcess::Running || agent->status() == AgentProcess::Starting))
+                return 2;
+        }
+    }
+    return 0;
+}
+
 QString AgentManager::claudePath() const
 {
     return m_claudePath;

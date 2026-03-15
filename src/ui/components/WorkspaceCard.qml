@@ -10,6 +10,7 @@ Kirigami.AbstractCard {
     property string repositoryPath: ""
     property string branch: ""
     property int workspaceStatus: 0
+    property bool agentsRunning: false
     property int agents: 0
 
     signal clicked()
@@ -28,7 +29,8 @@ Kirigami.AbstractCard {
             }
 
             StatusBadge {
-                status: workspaceStatus
+                status: agentsRunning ? 2 : workspaceStatus
+                context: agentsRunning ? "agent" : "workspace"
             }
         }
 

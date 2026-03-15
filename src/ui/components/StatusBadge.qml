@@ -7,33 +7,44 @@ RowLayout {
     id: badge
     spacing: Kirigami.Units.smallSpacing
 
-    // Maps to Workspace::Status and AgentProcess::Status
     property int status: 0
+    property string context: "workspace" // "workspace" or "agent"
 
-    readonly property var statusColors: [
-        Kirigami.Theme.positiveTextColor,   // 0: Active/Idle
-        Kirigami.Theme.neutralTextColor,    // 1: Paused/Starting
-        Kirigami.Theme.focusColor,          // 2: Completed/Running
-        Kirigami.Theme.disabledTextColor,   // 3: Archived/Completed
-        Kirigami.Theme.negativeTextColor    // 4: Error
+    readonly property var colors: [
+        Kirigami.Theme.positiveTextColor,   // 0
+        Kirigami.Theme.neutralTextColor,    // 1
+        Kirigami.Theme.focusColor,          // 2
+        Kirigami.Theme.disabledTextColor,   // 3
+        Kirigami.Theme.negativeTextColor    // 4
     ]
 
-    readonly property var statusLabels: [
+    readonly property var workspaceLabels: [
         i18n("Active"),
+        i18n("Paused"),
+        i18n("Completed"),
+        i18n("Archived"),
+        i18n("Error")
+    ]
+
+    readonly property var agentLabels: [
+        i18n("Idle"),
         i18n("Starting"),
         i18n("Running"),
         i18n("Completed"),
         i18n("Error")
     ]
 
+    readonly property var labels: context === "agent" ? agentLabels : workspaceLabels
+    readonly property bool pulsing: (context === "agent" && status === 2)
+
     Rectangle {
         width: Kirigami.Units.smallSpacing * 2
         height: width
         radius: width / 2
-        color: statusColors[Math.min(status, statusColors.length - 1)]
+        color: colors[Math.min(status, colors.length - 1)]
 
         SequentialAnimation on opacity {
-            running: status === 2 // Running
+            running: pulsing
             loops: Animation.Infinite
             NumberAnimation { to: 0.3; duration: 800; easing.type: Easing.InOutQuad }
             NumberAnimation { to: 1.0; duration: 800; easing.type: Easing.InOutQuad }
@@ -41,8 +52,8 @@ RowLayout {
     }
 
     QQC2.Label {
-        text: statusLabels[Math.min(status, statusLabels.length - 1)]
+        text: labels[Math.min(status, labels.length - 1)]
         font.pointSize: Kirigami.Theme.smallFont.pointSize
-        color: statusColors[Math.min(status, statusColors.length - 1)]
+        color: colors[Math.min(status, colors.length - 1)]
     }
 }

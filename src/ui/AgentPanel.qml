@@ -39,6 +39,7 @@ ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
 
         StatusBadge {
+            context: "agent"
             status: agentPanel.agentStatus
         }
 

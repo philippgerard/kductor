@@ -36,6 +36,7 @@ public:
     Q_INVOKABLE QString agentActivity(const QString &agentId) const;
 
     Q_INVOKABLE bool canStartAgent() const;
+    Q_INVOKABLE int workspaceAgentStatus(const QString &workspaceId) const; // 0=idle, 2=running
     Q_INVOKABLE QString claudePath() const;
 
     int activeCount() const;
