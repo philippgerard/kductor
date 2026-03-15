@@ -300,6 +300,15 @@ void WorktreeManager::checkPrStatus(const QString &worktreePath)
     proc->closeWriteChannel();
 }
 
+void WorktreeManager::pullSource(const QString &repoPath, const QString &sourceBranch)
+{
+    QString script = QStringLiteral(
+        "git fetch origin '%1' 2>&1 && git checkout '%1' 2>&1 && git pull --ff-only 2>&1"
+    ).arg(sourceBranch);
+    runAsync(QStringLiteral("pull"), repoPath,
+             QStringLiteral("bash"), {QStringLiteral("-c"), script});
+}
+
 bool WorktreeManager::hasRemote(const QString &worktreePath) const
 {
     QProcess proc;

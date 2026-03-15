@@ -30,6 +30,7 @@ public:
     Q_INVOKABLE void archiveWorkspace(const QString &worktreePath, const QString &repoPath,
                                       const QString &deleteBranch = QString());
     Q_INVOKABLE bool hasRemote(const QString &worktreePath) const;
+    Q_INVOKABLE void pullSource(const QString &repoPath, const QString &sourceBranch);
     Q_INVOKABLE void checkPrStatus(const QString &worktreePath);
     Q_INVOKABLE QString detectForge(const QString &worktreePath) const; // "github", "gitea", or "unknown"
     Q_INVOKABLE QString remoteWebUrl(const QString &worktreePath) const;

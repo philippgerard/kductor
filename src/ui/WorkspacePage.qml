@@ -33,11 +33,20 @@ Kirigami.Page {
     Connections {
         target: WorktreeManager
         function onPrStatusChecked(url, number, state, mergeable, checks) {
+            let wasPrOpen = prState === "OPEN";
             prUrl = url;
             prNumber = number;
             prState = state;
             prMergeable = mergeable;
             prChecks = checks;
+
+            // Auto-pull when PR was merged remotely
+            if (wasPrOpen && state === "MERGED") {
+                WorkspaceModel.updateStatus(workspaceId, 2);
+                WorktreeManager.pullSource(repoPath, sourceBranch);
+                applicationWindow().showPassiveNotification(
+                    i18n("PR #%1 merged. Pulling %2…", number, sourceBranch), 4000);
+            }
         }
     }
 
