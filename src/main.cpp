@@ -5,6 +5,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QIcon>
+#include <QWindow>
 
 #include <KAboutData>
 #include <KDBusService>
@@ -134,6 +135,20 @@ int main(int argc, char *argv[])
 
     if (engine.rootObjects().isEmpty()) {
         return -1;
+    }
+
+    // Connect tray left-click to toggle the QML window
+    auto *rootWindow = qobject_cast<QWindow *>(engine.rootObjects().first());
+    if (rootWindow) {
+        QObject::connect(tray, &KStatusNotifierItem::activateRequested, rootWindow, [rootWindow](bool, const QPoint &) {
+            if (rootWindow->isVisible()) {
+                rootWindow->hide();
+            } else {
+                rootWindow->show();
+                rootWindow->raise();
+                rootWindow->requestActivate();
+            }
+        });
     }
 
     return app.exec();
