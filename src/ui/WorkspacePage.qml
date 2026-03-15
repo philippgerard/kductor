@@ -46,6 +46,7 @@ Kirigami.Page {
                 WorktreeManager.pullSource(repoPath, sourceBranch);
                 applicationWindow().showPassiveNotification(
                     i18n("PR #%1 merged. Pulling %2…", number, sourceBranch), 4000);
+                cleanupAfterMergeDialog.open();
             }
         }
     }
@@ -444,6 +445,33 @@ Kirigami.Page {
                     archiveDialog.close();
                     for (let a of agents) AgentManager.removeAgent(a.id);
                     WorktreeManager.archiveWorkspace(worktreePath, repoPath, deleteBranchCheck.checked ? branchName : "");
+                }
+            }
+        ]
+    }
+
+    Kirigami.PromptDialog {
+        id: cleanupAfterMergeDialog
+        title: i18n("PR Merged")
+        subtitle: i18n("The pull request was merged and the remote branch deleted. Archive this workspace and clean up the local branch?")
+        standardButtons: Kirigami.Dialog.No
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Archive & Delete Branch")
+                icon.name: "archive-remove"
+                onTriggered: {
+                    cleanupAfterMergeDialog.close();
+                    for (let a of agents) AgentManager.removeAgent(a.id);
+                    WorktreeManager.archiveWorkspace(worktreePath, repoPath, branchName);
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Archive Only")
+                icon.name: "archive-remove"
+                onTriggered: {
+                    cleanupAfterMergeDialog.close();
+                    for (let a of agents) AgentManager.removeAgent(a.id);
+                    WorktreeManager.archiveWorkspace(worktreePath, repoPath, "");
                 }
             }
         ]
