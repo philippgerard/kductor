@@ -102,13 +102,19 @@ void WorktreeManager::runAsync(const QString &operation, const QString &workDir,
         QString stdErr = QString::fromUtf8(proc->readAllStandardError()).trimmed();
         proc->deleteLater();
 
+        // Combine output for display
+        QString combined = stdOut;
+        if (!stdErr.isEmpty()) {
+            if (!combined.isEmpty()) combined += QStringLiteral("\n");
+            combined += stdErr;
+        }
+
         if (status == QProcess::CrashExit || exitCode != 0) {
-            QString error = stdErr.isEmpty() ? stdOut : stdErr;
-            if (error.isEmpty())
-                error = QStringLiteral("Process exited with code %1").arg(exitCode);
-            Q_EMIT operationFailed(operation, error);
+            if (combined.isEmpty())
+                combined = QStringLiteral("Process exited with code %1").arg(exitCode);
+            Q_EMIT operationFailed(operation, combined);
         } else {
-            Q_EMIT operationSucceeded(operation, stdOut);
+            Q_EMIT operationSucceeded(operation, combined);
         }
     });
 
@@ -152,17 +158,29 @@ void WorktreeManager::mergePullRequest(const QString &worktreePath)
 
 void WorktreeManager::mergeToSource(const QString &repoPath, const QString &branchName, const QString &sourceBranch)
 {
-    // Merge locally: stash any changes, checkout source, merge, restore
-    QString script = QStringLiteral(
-        "set -e\n"
+    // First: find and auto-commit any uncommitted changes in the worktree
+    // Then: in the main repo, checkout source branch and merge
+    // We need the worktree path to commit changes there first
+    // Find worktree path from branch name
+    QString findWt = QStringLiteral(
+        "WT_PATH=$(git worktree list --porcelain | grep -B1 'branch refs/heads/%1' | head -1 | sed 's/worktree //')\n"
+        "if [ -n \"$WT_PATH\" ] && [ -d \"$WT_PATH\" ]; then\n"
+        "  cd \"$WT_PATH\"\n"
+        "  if ! git diff --quiet HEAD 2>/dev/null || ! git diff --cached --quiet HEAD 2>/dev/null; then\n"
+        "    git add -A\n"
+        "    git commit -m 'Auto-commit uncommitted changes before merge' --quiet\n"
+        "    echo 'Committed pending changes in worktree'\n"
+        "  fi\n"
+        "  cd '%2'\n"
+        "fi\n"
         "git stash --quiet 2>/dev/null || true\n"
-        "git checkout '%1'\n"
-        "git merge '%2' --no-edit\n"
+        "git checkout '%3' 2>&1\n"
+        "git merge '%1' --no-edit 2>&1\n"
         "git stash pop --quiet 2>/dev/null || true\n"
-    ).arg(sourceBranch, branchName);
+    ).arg(branchName, repoPath, sourceBranch);
     runAsync(QStringLiteral("merge"), repoPath,
              QStringLiteral("bash"),
-             {QStringLiteral("-c"), script});
+             {QStringLiteral("-c"), findWt});
 }
 
 void WorktreeManager::archiveWorkspace(const QString &worktreePath, const QString &repoPath)
