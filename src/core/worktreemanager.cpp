@@ -131,6 +131,17 @@ void WorktreeManager::runAsync(const QString &operation, const QString &workDir,
 
 void WorktreeManager::pushBranch(const QString &worktreePath)
 {
+    // Check if remote exists first
+    QProcess check;
+    check.setWorkingDirectory(worktreePath);
+    check.start(QStringLiteral("git"), {QStringLiteral("remote")});
+    check.waitForFinished(3000);
+    QString remotes = QString::fromUtf8(check.readAllStandardOutput()).trimmed();
+    if (remotes.isEmpty()) {
+        Q_EMIT operationFailed(QStringLiteral("push"),
+            QStringLiteral("No remote configured. Add one with: git remote add origin <url>"));
+        return;
+    }
     runAsync(QStringLiteral("push"), worktreePath,
              QStringLiteral("git"),
              {QStringLiteral("push"), QStringLiteral("-u"), QStringLiteral("origin"), QStringLiteral("HEAD")});
@@ -190,6 +201,16 @@ void WorktreeManager::archiveWorkspace(const QString &worktreePath, const QStrin
     runAsync(QStringLiteral("archive"), repoPath,
              QStringLiteral("git"),
              {QStringLiteral("worktree"), QStringLiteral("prune")});
+}
+
+bool WorktreeManager::hasRemote(const QString &worktreePath) const
+{
+    QProcess proc;
+    proc.setWorkingDirectory(worktreePath);
+    proc.start(QStringLiteral("git"), {QStringLiteral("remote")});
+    if (!proc.waitForFinished(3000))
+        return false;
+    return !QString::fromUtf8(proc.readAllStandardOutput()).trimmed().isEmpty();
 }
 
 QString WorktreeManager::detectForge(const QString &worktreePath) const

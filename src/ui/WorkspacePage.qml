@@ -23,8 +23,10 @@ Kirigami.Page {
     property bool operationBusy: false
     property string forge: ""
     property string webUrl: ""
+    property bool remoteAvailable: false
 
     Component.onCompleted: {
+        remoteAvailable = WorktreeManager.hasRemote(worktreePath);
         forge = WorktreeManager.detectForge(worktreePath);
         webUrl = WorktreeManager.remoteWebUrl(worktreePath);
         let existing = AgentManager.agentsForWorkspace(workspaceId);
@@ -154,6 +156,7 @@ Kirigami.Page {
                     icon.name: "vcs-push"
                     text: forge === "github" ? i18n("Push & PR") : i18n("Push")
                     display: QQC2.AbstractButton.TextBesideIcon
+                    visible: remoteAvailable
                     enabled: !operationBusy
                     onClicked: forge === "github" ? pushThenPR() : pushThenOpenWeb()
                 }
