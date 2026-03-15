@@ -24,11 +24,36 @@ Kirigami.Page {
     property string forge: ""
     property string webUrl: ""
     property bool remoteAvailable: false
+    property string prUrl: ""
+    property int prNumber: 0
+    property string prState: "none"  // none, OPEN, MERGED, CLOSED
+    property string prMergeable: ""
+    property string prChecks: "none" // none, pending, success, failure
+
+    Connections {
+        target: WorktreeManager
+        function onPrStatusChecked(url, number, state, mergeable, checks) {
+            prUrl = url;
+            prNumber = number;
+            prState = state;
+            prMergeable = mergeable;
+            prChecks = checks;
+        }
+    }
+
+    Timer {
+        id: prPollTimer
+        interval: 15000
+        repeat: true
+        running: remoteAvailable && prState === "OPEN"
+        onTriggered: WorktreeManager.checkPrStatus(worktreePath)
+    }
 
     Component.onCompleted: {
         remoteAvailable = WorktreeManager.hasRemote(worktreePath);
         forge = WorktreeManager.detectForge(worktreePath);
         webUrl = WorktreeManager.remoteWebUrl(worktreePath);
+        if (remoteAvailable) WorktreeManager.checkPrStatus(worktreePath);
         let existing = AgentManager.agentsForWorkspace(workspaceId);
         if (existing.length > 0) {
             let restored = [];
@@ -89,8 +114,16 @@ Kirigami.Page {
             }
             let msg = "";
             if (op === "push") msg = i18n("Branch pushed.");
-            else if (op === "pr") msg = result || i18n("Pull request created.");
-            else if (op === "merge-pr") { msg = i18n("Pull request merged."); WorkspaceModel.updateStatus(workspaceId, 2); }
+            else if (op === "pr") {
+                msg = result || i18n("Pull request created.");
+                // Refresh PR status immediately
+                WorktreeManager.checkPrStatus(worktreePath);
+            }
+            else if (op === "merge-pr") {
+                msg = i18n("Pull request merged.");
+                WorkspaceModel.updateStatus(workspaceId, 2);
+                prState = "MERGED"; prNumber = 0; prUrl = "";
+            }
             else if (op === "merge") { msg = i18n("Merged into %1.", sourceBranch); WorkspaceModel.updateStatus(workspaceId, 2); }
             applicationWindow().showPassiveNotification(msg, 4000);
         }
@@ -153,12 +186,38 @@ Kirigami.Page {
                     onClicked: { showingDiff = !showingDiff; if (showingDiff) diffViewer.reload(); }
                 }
                 QQC2.ToolButton {
-                    icon.name: "vcs-push"
-                    text: forge === "github" ? i18n("Push & PR") : i18n("Push")
-                    display: QQC2.AbstractButton.TextBesideIcon
                     visible: remoteAvailable
                     enabled: !operationBusy
-                    onClicked: forge === "github" ? pushThenPR() : pushThenOpenWeb()
+                    display: QQC2.AbstractButton.TextBesideIcon
+
+                    icon.name: {
+                        if (prState === "OPEN") return "vcs-merge";
+                        if (prState === "MERGED") return "vcs-push";
+                        return "vcs-push";
+                    }
+                    text: {
+                        if (prState === "OPEN") return i18n("PR #%1", prNumber);
+                        if (prState === "MERGED") return forge === "github" ? i18n("Push & PR") : i18n("Push");
+                        if (prState === "CLOSED") return forge === "github" ? i18n("Push & PR") : i18n("Push");
+                        return forge === "github" ? i18n("Push & PR") : i18n("Push");
+                    }
+
+                    // Color the icon based on PR status
+                    Kirigami.Theme.textColor: {
+                        if (prState !== "OPEN") return Kirigami.Theme.textColor;
+                        if (prChecks === "success" && prMergeable === "MERGEABLE") return Kirigami.Theme.positiveTextColor;
+                        if (prChecks === "failure" || prMergeable === "CONFLICTING") return Kirigami.Theme.negativeTextColor;
+                        if (prChecks === "pending") return Kirigami.Theme.neutralTextColor;
+                        return Kirigami.Theme.textColor;
+                    }
+
+                    onClicked: {
+                        if (prState === "OPEN" && prUrl.length > 0) {
+                            Qt.openUrlExternally(prUrl);
+                        } else {
+                            if (forge === "github") pushThenPR(); else pushThenOpenWeb();
+                        }
+                    }
                 }
                 QQC2.ToolButton {
                     id: mergeButton

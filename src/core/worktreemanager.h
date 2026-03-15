@@ -30,6 +30,7 @@ public:
     Q_INVOKABLE void archiveWorkspace(const QString &worktreePath, const QString &repoPath,
                                       const QString &deleteBranch = QString());
     Q_INVOKABLE bool hasRemote(const QString &worktreePath) const;
+    Q_INVOKABLE void checkPrStatus(const QString &worktreePath);
     Q_INVOKABLE QString detectForge(const QString &worktreePath) const; // "github", "gitea", or "unknown"
     Q_INVOKABLE QString remoteWebUrl(const QString &worktreePath) const;
 
@@ -43,6 +44,8 @@ Q_SIGNALS:
     void operationStarted(const QString &operation);
     void operationSucceeded(const QString &operation, const QString &result);
     void operationFailed(const QString &operation, const QString &error);
+    void prStatusChecked(const QString &url, int number, const QString &state,
+                         const QString &mergeable, const QString &checks);
 
 private:
     GitManager *m_gitManager;

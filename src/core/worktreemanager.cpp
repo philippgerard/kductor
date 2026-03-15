@@ -3,6 +3,9 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
@@ -209,6 +212,56 @@ void WorktreeManager::archiveWorkspace(const QString &worktreePath, const QStrin
                  QStringLiteral("git"),
                  {QStringLiteral("worktree"), QStringLiteral("prune")});
     }
+}
+
+void WorktreeManager::checkPrStatus(const QString &worktreePath)
+{
+    auto *proc = new QProcess(this);
+    proc->setWorkingDirectory(worktreePath);
+    proc->setProgram(QStringLiteral("gh"));
+    proc->setArguments({QStringLiteral("pr"), QStringLiteral("view"),
+                        QStringLiteral("--json"), QStringLiteral("url,number,state,mergeable,statusCheckRollup")});
+
+    connect(proc, &QProcess::finished, this, [this, proc](int exitCode, QProcess::ExitStatus) {
+        QString output = QString::fromUtf8(proc->readAllStandardOutput()).trimmed();
+        proc->deleteLater();
+
+        if (exitCode != 0 || output.isEmpty()) {
+            Q_EMIT prStatusChecked(QString(), 0, QStringLiteral("none"), QString(), QString());
+            return;
+        }
+
+        QJsonDocument doc = QJsonDocument::fromJson(output.toUtf8());
+        QJsonObject obj = doc.object();
+
+        QString url = obj[QStringLiteral("url")].toString();
+        int number = obj[QStringLiteral("number")].toInt();
+        QString state = obj[QStringLiteral("state")].toString(); // OPEN, MERGED, CLOSED
+        QString mergeable = obj[QStringLiteral("mergeable")].toString(); // MERGEABLE, CONFLICTING, UNKNOWN
+
+        // Aggregate status checks
+        QString checks = QStringLiteral("none");
+        QJsonArray rollup = obj[QStringLiteral("statusCheckRollup")].toArray();
+        if (!rollup.isEmpty()) {
+            bool allSuccess = true;
+            bool anyFailure = false;
+            for (const auto &c : rollup) {
+                QString conclusion = c.toObject()[QStringLiteral("conclusion")].toString();
+                QString status = c.toObject()[QStringLiteral("status")].toString();
+                if (conclusion == QStringLiteral("FAILURE") || conclusion == QStringLiteral("ERROR"))
+                    anyFailure = true;
+                if (conclusion != QStringLiteral("SUCCESS") && status != QStringLiteral("COMPLETED"))
+                    allSuccess = false;
+            }
+            if (anyFailure) checks = QStringLiteral("failure");
+            else if (allSuccess) checks = QStringLiteral("success");
+            else checks = QStringLiteral("pending");
+        }
+
+        Q_EMIT prStatusChecked(url, number, state, mergeable, checks);
+    });
+
+    proc->start();
 }
 
 bool WorktreeManager::hasRemote(const QString &worktreePath) const
