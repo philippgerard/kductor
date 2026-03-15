@@ -193,6 +193,24 @@ void AgentProcess::parseLine(const QByteArray &line)
     } else if (type == QStringLiteral("result")) {
         m_totalCost = obj[QStringLiteral("total_cost_usd")].toDouble();
         Q_EMIT costUpdated(m_totalCost);
+
+        // Extract context usage from modelUsage
+        QJsonObject modelUsage = obj[QStringLiteral("modelUsage")].toObject();
+        if (!modelUsage.isEmpty()) {
+            // First model entry contains the info
+            auto it = modelUsage.begin();
+            if (it != modelUsage.end()) {
+                QJsonObject mu = it.value().toObject();
+                m_contextWindow = mu[QStringLiteral("contextWindow")].toInt();
+                int input = mu[QStringLiteral("inputTokens")].toInt();
+                int output = mu[QStringLiteral("outputTokens")].toInt();
+                int cacheRead = mu[QStringLiteral("cacheReadInputTokens")].toInt();
+                int cacheCreate = mu[QStringLiteral("cacheCreationInputTokens")].toInt();
+                m_contextUsed = input + output + cacheRead + cacheCreate;
+                Q_EMIT contextUpdated(m_contextUsed, m_contextWindow);
+            }
+        }
+
         setStatus(Completed);
         setActivity(QStringLiteral("Completed"));
         Q_EMIT resultReady(obj);

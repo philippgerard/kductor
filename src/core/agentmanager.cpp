@@ -362,6 +362,10 @@ void AgentManager::connectAgent(const QString &agentId, AgentProcess *agent)
         Q_EMIT agentError(agentId, error);
     });
 
+    connect(agent, &AgentProcess::contextUpdated, this, [this, agentId](int used, int window) {
+        Q_EMIT agentContextUpdated(agentId, used, window);
+    });
+
     connect(agent, &AgentProcess::processFinished, this, [this, agentId](int) {
         Q_EMIT agentFinished(agentId);
         saveAgents(); // persist output after each run

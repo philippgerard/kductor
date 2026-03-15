@@ -68,6 +68,7 @@ Q_SIGNALS:
     void agentActivityChanged(const QString &agentId, const QString &activity);
     void agentCostChanged(const QString &agentId, double cost);
     void agentOutput(const QString &agentId, int lineType, const QString &content, const QString &toolName);
+    void agentContextUpdated(const QString &agentId, int used, int window);
 
 private:
     QHash<QString, AgentProcess *> m_agents;

@@ -14,6 +14,8 @@ class AgentProcess : public QObject
     Q_PROPERTY(int status READ status NOTIFY statusChanged)
     Q_PROPERTY(double totalCost READ totalCost NOTIFY costUpdated)
     Q_PROPERTY(QString currentActivity READ currentActivity NOTIFY activityChanged)
+    Q_PROPERTY(int contextUsed READ contextUsed NOTIFY contextUpdated)
+    Q_PROPERTY(int contextWindow READ contextWindow NOTIFY contextUpdated)
 
 public:
     enum Status {
@@ -33,6 +35,8 @@ public:
     int status() const { return m_status; }
     double totalCost() const { return m_totalCost; }
     QString currentActivity() const { return m_currentActivity; }
+    int contextUsed() const { return m_contextUsed; }
+    int contextWindow() const { return m_contextWindow; }
 
     Q_INVOKABLE void start(const QString &workingDir, const QString &prompt,
                            const QString &model = QStringLiteral("sonnet"));
@@ -52,6 +56,7 @@ Q_SIGNALS:
     void toolUse(const QString &toolName, const QJsonObject &input);
     void toolResult(const QString &toolName, const QString &output);
     void resultReady(const QJsonObject &result);
+    void contextUpdated(int used, int window);
     void errorOccurred(const QString &error);
     void processFinished(int exitCode);
 
@@ -68,6 +73,8 @@ private:
     int m_status = Idle;
     double m_totalCost = 0.0;
     QString m_currentActivity;
+    int m_contextUsed = 0;
+    int m_contextWindow = 0;
     QByteArray m_buffer;
 
     void setStatus(int status);

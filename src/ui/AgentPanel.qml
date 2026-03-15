@@ -13,6 +13,8 @@ ColumnLayout {
     property int agentStatus: AgentManager.agentStatus(agentId)
     property string agentActivity: ""
     property var outputModel: AgentManager.outputModel(agentId)
+    property int contextUsed: 0
+    property int contextWindow: 0
 
     signal closeRequested(string agentId)
 
@@ -26,6 +28,12 @@ ColumnLayout {
         function onAgentActivityChanged(id, activity) {
             if (id === agentPanel.agentId)
                 agentPanel.agentActivity = activity;
+        }
+        function onAgentContextUpdated(id, used, window) {
+            if (id === agentPanel.agentId) {
+                agentPanel.contextUsed = used;
+                agentPanel.contextWindow = window;
+            }
         }
     }
 
@@ -41,6 +49,31 @@ ColumnLayout {
         StatusBadge {
             context: "agent"
             status: agentPanel.agentStatus
+        }
+
+        // Context usage bar
+        RowLayout {
+            visible: contextWindow > 0
+            spacing: Kirigami.Units.smallSpacing
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 8
+
+            QQC2.ProgressBar {
+                Layout.fillWidth: true
+                from: 0
+                to: contextWindow
+                value: contextUsed
+                opacity: 0.6
+            }
+            QQC2.Label {
+                text: {
+                    let pct = Math.round(contextUsed / contextWindow * 100);
+                    let usedK = Math.round(contextUsed / 1000);
+                    let totalK = Math.round(contextWindow / 1000);
+                    return usedK + "k / " + totalK + "k";
+                }
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                opacity: 0.5
+            }
         }
 
         Item { Layout.fillWidth: true }
