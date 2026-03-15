@@ -185,53 +185,28 @@ Kirigami.Page {
                     display: QQC2.AbstractButton.TextBesideIcon
                     onClicked: { showingDiff = !showingDiff; if (showingDiff) diffViewer.reload(); }
                 }
-                QQC2.AbstractButton {
-                    visible: remoteAvailable
-                    enabled: !operationBusy
-                    padding: Kirigami.Units.smallSpacing
-                    hoverEnabled: true
-
-                    readonly property color prColor: {
-                        if (prState !== "OPEN") return Kirigami.Theme.textColor;
-                        if (prChecks === "success" && prMergeable === "MERGEABLE") return Kirigami.Theme.positiveTextColor;
+                Rectangle {
+                    visible: remoteAvailable && prState === "OPEN"
+                    width: Kirigami.Units.smallSpacing * 2.5
+                    height: width
+                    radius: width / 2
+                    Layout.alignment: Qt.AlignVCenter
+                    color: {
+                        if (prChecks === "success" && (prMergeable === "MERGEABLE" || prMergeable === "")) return Kirigami.Theme.positiveTextColor;
                         if (prChecks === "failure" || prMergeable === "CONFLICTING") return Kirigami.Theme.negativeTextColor;
                         if (prChecks === "pending") return Kirigami.Theme.neutralTextColor;
-                        return Kirigami.Theme.focusColor;
+                        return Kirigami.Theme.positiveTextColor;
                     }
-
-                    contentItem: RowLayout {
-                        spacing: Kirigami.Units.smallSpacing
-
-                        // Status dot for open PRs
-                        Rectangle {
-                            visible: prState === "OPEN"
-                            width: Kirigami.Units.smallSpacing * 2.5
-                            height: width
-                            radius: width / 2
-                            color: prColor
-                        }
-
-                        Kirigami.Icon {
-                            visible: prState !== "OPEN"
-                            source: "vcs-push"
-                            Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
-                            Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
-                        }
-
-                        QQC2.Label {
-                            text: {
-                                if (prState === "OPEN") return i18n("PR #%1", prNumber);
-                                return forge === "github" ? i18n("Push & PR") : i18n("Push");
-                            }
-                            color: prState === "OPEN" ? prColor : Kirigami.Theme.textColor
-                        }
+                }
+                QQC2.ToolButton {
+                    visible: remoteAvailable
+                    enabled: !operationBusy
+                    display: QQC2.AbstractButton.TextBesideIcon
+                    icon.name: prState === "OPEN" ? "vcs-merge" : "vcs-push"
+                    text: {
+                        if (prState === "OPEN") return i18n("PR #%1", prNumber);
+                        return forge === "github" ? i18n("Push & PR") : i18n("Push");
                     }
-
-                    background: Rectangle {
-                        color: parent.hovered ? Kirigami.Theme.highlightColor.alpha(0.1) : "transparent"
-                        radius: Kirigami.Units.smallSpacing
-                    }
-
                     onClicked: {
                         if (prState === "OPEN" && prUrl.length > 0) {
                             Qt.openUrlExternally(prUrl);
