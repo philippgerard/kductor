@@ -77,9 +77,11 @@ Kirigami.Page {
         function onOperationSucceeded(op, result) {
             operationBusy = false;
             if (op === "archive") {
+                let repo = repoPath;
                 WorkspaceModel.remove(workspaceId);
                 applicationWindow().selectedWorkspaceId = "";
                 applicationWindow().selectedWorkspaceName = "";
+                applicationWindow().loadRepoOverview(repo);
                 applicationWindow().showPassiveNotification(i18n("Workspace archived."));
                 return;
             }

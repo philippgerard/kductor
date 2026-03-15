@@ -17,6 +17,14 @@ Kirigami.ApplicationWindow {
     property string selectedWorkspaceId: ""
     property string selectedWorkspaceName: ""
 
+    function loadRepoOverview(repoPath) {
+        selectedWorkspaceId = "";
+        selectedWorkspaceName = "";
+        workspaceLoader.setSource(Qt.resolvedUrl("RepoOverviewPage.qml"), {
+            repoPath: repoPath
+        });
+    }
+
     onClosing: function(close) {
         if (AgentManager.activeCount > 0) {
             close.accepted = false;
@@ -151,6 +159,7 @@ Kirigami.ApplicationWindow {
                                                     QQC2.ToolTip.visible: hovered
                                                 }
                                             }
+                                            onClicked: loadRepoOverview(repoSection.modelData)
                                         }
 
                                         // Workspaces under this repo
@@ -254,7 +263,7 @@ Kirigami.ApplicationWindow {
                 // Empty state
                 Kirigami.PlaceholderMessage {
                     anchors.centerIn: parent
-                    visible: !workspaceLoader.item
+                    visible: workspaceLoader.source == ""
                     width: parent.width - Kirigami.Units.largeSpacing * 4
                     icon.name: "kductor"
                     text: sidebarContent.repos.length === 0
@@ -275,7 +284,6 @@ Kirigami.ApplicationWindow {
                 Loader {
                     id: workspaceLoader
                     anchors.fill: parent
-                    active: selectedWorkspaceId !== ""
                 }
             }
         }
