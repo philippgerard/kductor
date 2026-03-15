@@ -23,18 +23,23 @@ Kirigami.Page {
         let existing = AgentManager.agentsForWorkspace(workspaceId);
         if (existing.length > 0) {
             let restored = [];
+            let maxNum = 0;
             for (let i = 0; i < existing.length; i++) {
-                restored.push({id: existing[i], name: i18n("Agent %1", i + 1)});
+                let name = AgentManager.agentName(existing[i]) || i18n("Agent %1", i + 1);
+                restored.push({id: existing[i], name: name});
+                // Extract number from name to continue counter
+                let match = name.match(/(\d+)$/);
+                if (match) maxNum = Math.max(maxNum, parseInt(match[1]));
             }
             agents = restored;
-            nextAgentNumber = existing.length + 1;
+            nextAgentNumber = maxNum + 1;
             currentAgentId = existing[0];
         }
     }
 
     function addAgent() {
-        let agentId = AgentManager.createAgent(workspacePage.workspaceId);
         let name = i18n("Agent %1", nextAgentNumber);
+        let agentId = AgentManager.createAgent(workspacePage.workspaceId, name);
         nextAgentNumber++;
         agents = [...agents, {id: agentId, name: name}];
         currentAgentId = agentId;

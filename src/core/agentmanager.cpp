@@ -4,6 +4,8 @@
 
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
 
@@ -11,6 +13,7 @@ AgentManager::AgentManager(QObject *parent)
     : QObject(parent)
 {
     detectClaude();
+    loadAgents();
 }
 
 void AgentManager::detectClaude()
@@ -35,7 +38,60 @@ void AgentManager::detectClaude()
     }
 }
 
-QString AgentManager::createAgent(const QString &workspaceId)
+static QString agentsFilePath()
+{
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir().mkpath(dir);
+    return dir + QStringLiteral("/agents.json");
+}
+
+void AgentManager::saveAgents()
+{
+    QJsonArray arr;
+    for (auto it = m_agentToWorkspace.cbegin(); it != m_agentToWorkspace.cend(); ++it) {
+        QJsonObject obj;
+        obj[QStringLiteral("id")] = it.key();
+        obj[QStringLiteral("workspaceId")] = it.value();
+        obj[QStringLiteral("name")] = m_agentNames.value(it.key());
+        arr.append(obj);
+    }
+    QFile file(agentsFilePath());
+    if (file.open(QIODevice::WriteOnly))
+        file.write(QJsonDocument(arr).toJson());
+}
+
+void AgentManager::loadAgents()
+{
+    QFile file(agentsFilePath());
+    if (!file.open(QIODevice::ReadOnly))
+        return;
+
+    QJsonArray arr = QJsonDocument::fromJson(file.readAll()).array();
+    for (const auto &val : arr) {
+        QJsonObject obj = val.toObject();
+        QString agentId = obj[QStringLiteral("id")].toString();
+        QString workspaceId = obj[QStringLiteral("workspaceId")].toString();
+        QString name = obj[QStringLiteral("name")].toString();
+
+        if (agentId.isEmpty() || workspaceId.isEmpty())
+            continue;
+
+        // Recreate agent process and model (idle state, output history lost)
+        auto *agent = new AgentProcess(this);
+        auto *model = new AgentOutputModel(this);
+
+        // Override the auto-generated ID with the persisted one
+        // We need to store under the original ID for session continuity
+        QString newId = agent->agentId();
+        m_agents.insert(agentId, agent);
+        m_outputModels.insert(agentId, model);
+        m_agentToWorkspace.insert(agentId, workspaceId);
+        m_agentNames.insert(agentId, name);
+        connectAgent(agentId, agent);
+    }
+}
+
+QString AgentManager::createAgent(const QString &workspaceId, const QString &name)
 {
     auto *agent = new AgentProcess(this);
     auto *model = new AgentOutputModel(this);
@@ -44,7 +100,10 @@ QString AgentManager::createAgent(const QString &workspaceId)
     m_agents.insert(agentId, agent);
     m_outputModels.insert(agentId, model);
     m_agentToWorkspace.insert(agentId, workspaceId);
+    m_agentNames.insert(agentId, name);
     connectAgent(agentId, agent);
+
+    saveAgents();
 
     Q_EMIT agentSpawned(agentId, workspaceId);
     Q_EMIT activeCountChanged();
@@ -54,6 +113,11 @@ QString AgentManager::createAgent(const QString &workspaceId)
 AgentOutputModel *AgentManager::outputModel(const QString &agentId) const
 {
     return m_outputModels.value(agentId, nullptr);
+}
+
+QString AgentManager::agentName(const QString &agentId) const
+{
+    return m_agentNames.value(agentId);
 }
 
 void AgentManager::startAgent(const QString &agentId, const QString &workingDir,
@@ -101,7 +165,9 @@ void AgentManager::removeAgent(const QString &agentId)
     if (auto *model = m_outputModels.take(agentId))
         model->deleteLater();
     m_agentToWorkspace.remove(agentId);
+    m_agentNames.remove(agentId);
 
+    saveAgents();
     Q_EMIT activeCountChanged();
 }
 

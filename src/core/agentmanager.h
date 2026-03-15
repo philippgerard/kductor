@@ -17,7 +17,7 @@ class AgentManager : public QObject
 public:
     explicit AgentManager(QObject *parent = nullptr);
 
-    Q_INVOKABLE QString createAgent(const QString &workspaceId);
+    Q_INVOKABLE QString createAgent(const QString &workspaceId, const QString &name = QString());
     Q_INVOKABLE void startAgent(const QString &agentId, const QString &workingDir,
                                 const QString &prompt, const QString &model = QStringLiteral("sonnet"));
     Q_INVOKABLE void sendPrompt(const QString &agentId, const QString &workingDir,
@@ -27,6 +27,7 @@ public:
     Q_INVOKABLE void removeAgent(const QString &agentId);
 
     Q_INVOKABLE QStringList agentsForWorkspace(const QString &workspaceId) const;
+    Q_INVOKABLE QString agentName(const QString &agentId) const;
     Q_INVOKABLE AgentOutputModel *outputModel(const QString &agentId) const;
     Q_INVOKABLE int agentStatus(const QString &agentId) const;
     Q_INVOKABLE QString agentActivity(const QString &agentId) const;
@@ -56,10 +57,13 @@ private:
     QHash<QString, AgentProcess *> m_agents;
     QHash<QString, AgentOutputModel *> m_outputModels;
     QHash<QString, QString> m_agentToWorkspace;
+    QHash<QString, QString> m_agentNames;
     int m_maxConcurrentAgents = 8;
     bool m_claudeAvailable = false;
     QString m_claudePath;
 
     void connectAgent(const QString &agentId, AgentProcess *agent);
     void detectClaude();
+    void saveAgents();
+    void loadAgents();
 };
