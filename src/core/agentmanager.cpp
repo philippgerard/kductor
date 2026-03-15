@@ -2,6 +2,7 @@
 #include "agentprocess.h"
 #include "agentoutputmodel.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
@@ -14,6 +15,7 @@ AgentManager::AgentManager(QObject *parent)
 {
     detectClaude();
     loadAgents();
+    connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, &AgentManager::saveAgents);
 }
 
 void AgentManager::detectClaude()
@@ -38,11 +40,23 @@ void AgentManager::detectClaude()
     }
 }
 
-static QString agentsFilePath()
+static QString dataDir()
 {
     QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QDir().mkpath(dir);
-    return dir + QStringLiteral("/agents.json");
+    return dir;
+}
+
+static QString agentsFilePath()
+{
+    return dataDir() + QStringLiteral("/agents.json");
+}
+
+static QString outputFilePath(const QString &agentId)
+{
+    QString dir = dataDir() + QStringLiteral("/output");
+    QDir().mkpath(dir);
+    return dir + QStringLiteral("/") + agentId + QStringLiteral(".json");
 }
 
 void AgentManager::saveAgents()
@@ -54,10 +68,18 @@ void AgentManager::saveAgents()
         obj[QStringLiteral("workspaceId")] = it.value();
         obj[QStringLiteral("name")] = m_agentNames.value(it.key());
         arr.append(obj);
+
+        // Save output model
+        auto *model = m_outputModels.value(it.key());
+        if (model && model->count() > 0) {
+            QFile outFile(outputFilePath(it.key()));
+            if (outFile.open(QIODevice::WriteOnly))
+                outFile.write(QJsonDocument(model->toJson()).toJson(QJsonDocument::Compact));
+        }
     }
     QFile file(agentsFilePath());
     if (file.open(QIODevice::WriteOnly))
-        file.write(QJsonDocument(arr).toJson());
+        file.write(QJsonDocument(arr).toJson(QJsonDocument::Compact));
 }
 
 void AgentManager::loadAgents()
@@ -76,13 +98,16 @@ void AgentManager::loadAgents()
         if (agentId.isEmpty() || workspaceId.isEmpty())
             continue;
 
-        // Recreate agent process and model (idle state, output history lost)
         auto *agent = new AgentProcess(this);
         auto *model = new AgentOutputModel(this);
 
-        // Override the auto-generated ID with the persisted one
-        // We need to store under the original ID for session continuity
-        QString newId = agent->agentId();
+        // Restore output history
+        QFile outFile(outputFilePath(agentId));
+        if (outFile.open(QIODevice::ReadOnly)) {
+            QJsonArray outputArr = QJsonDocument::fromJson(outFile.readAll()).array();
+            model->loadFromJson(outputArr);
+        }
+
         m_agents.insert(agentId, agent);
         m_outputModels.insert(agentId, model);
         m_agentToWorkspace.insert(agentId, workspaceId);
@@ -166,6 +191,7 @@ void AgentManager::removeAgent(const QString &agentId)
         model->deleteLater();
     m_agentToWorkspace.remove(agentId);
     m_agentNames.remove(agentId);
+    QFile::remove(outputFilePath(agentId));
 
     saveAgents();
     Q_EMIT activeCountChanged();
@@ -273,5 +299,6 @@ void AgentManager::connectAgent(const QString &agentId, AgentProcess *agent)
 
     connect(agent, &AgentProcess::processFinished, this, [this, agentId](int) {
         Q_EMIT agentFinished(agentId);
+        saveAgents(); // persist output after each run
     });
 }

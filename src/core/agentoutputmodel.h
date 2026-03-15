@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QJsonArray>
 #include <QString>
 #include <QList>
 
@@ -43,6 +44,9 @@ public:
     Q_INVOKABLE void appendSystem(const QString &text);
     Q_INVOKABLE void appendError(const QString &text);
     Q_INVOKABLE void clear();
+
+    QJsonArray toJson() const;
+    void loadFromJson(const QJsonArray &arr);
 
 Q_SIGNALS:
     void countChanged();

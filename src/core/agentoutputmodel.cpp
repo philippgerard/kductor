@@ -1,6 +1,7 @@
 #include "agentoutputmodel.h"
 
 #include <QDateTime>
+#include <QJsonObject>
 
 AgentOutputModel::AgentOutputModel(QObject *parent)
     : QAbstractListModel(parent)
@@ -114,6 +115,37 @@ void AgentOutputModel::clear()
 {
     beginResetModel();
     m_lines.clear();
+    endResetModel();
+    Q_EMIT countChanged();
+}
+
+QJsonArray AgentOutputModel::toJson() const
+{
+    QJsonArray arr;
+    for (const auto &line : m_lines) {
+        QJsonObject obj;
+        obj[QStringLiteral("c")] = line.content;
+        obj[QStringLiteral("t")] = line.lineType;
+        if (!line.toolName.isEmpty())
+            obj[QStringLiteral("n")] = line.toolName;
+        arr.append(obj);
+    }
+    return arr;
+}
+
+void AgentOutputModel::loadFromJson(const QJsonArray &arr)
+{
+    beginResetModel();
+    m_lines.clear();
+    for (const auto &val : arr) {
+        QJsonObject obj = val.toObject();
+        m_lines.append({
+            obj[QStringLiteral("c")].toString(),
+            obj[QStringLiteral("t")].toInt(),
+            obj[QStringLiteral("n")].toString(),
+            0
+        });
+    }
     endResetModel();
     Q_EMIT countChanged();
 }
