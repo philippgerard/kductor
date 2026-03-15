@@ -152,14 +152,33 @@ void WorktreeManager::pushBranch(const QString &worktreePath)
 
 void WorktreeManager::createPullRequest(const QString &worktreePath, const QString &title, const QString &body)
 {
-    QStringList args = {QStringLiteral("pr"), QStringLiteral("create")};
-    if (!title.isEmpty())
-        args << QStringLiteral("--title") << title;
-    if (!body.isEmpty())
-        args << QStringLiteral("--body") << body;
-    else
-        args << QStringLiteral("--fill-verbose");
-    runAsync(QStringLiteral("pr"), worktreePath, QStringLiteral("gh"), args);
+    Q_UNUSED(title)
+    Q_UNUSED(body)
+
+    // Build a good PR title and body from the branch's commits
+    // Title: first commit subject (most descriptive), fallback to branch name
+    // Body: all commit messages + diff stat
+    QString script = QStringLiteral(
+        "set -e\n"
+        "BASE=$(git merge-base HEAD $(git rev-parse --abbrev-ref HEAD@{upstream} 2>/dev/null || echo main) 2>/dev/null || git rev-list --max-parents=0 HEAD)\n"
+        "COMMIT_COUNT=$(git rev-list --count $BASE..HEAD 2>/dev/null || echo 0)\n"
+        "\n"
+        "if [ \"$COMMIT_COUNT\" -le 1 ]; then\n"
+        "  TITLE=$(git log -1 --format='%%s')\n"
+        "else\n"
+        "  TITLE=$(git log $BASE..HEAD --format='%%s' | tail -1)\n"
+        "fi\n"
+        "\n"
+        "BODY=\"## Changes\\n\\n\"\n"
+        "BODY=\"${BODY}$(git log $BASE..HEAD --format='- %%s' --reverse)\\n\\n\"\n"
+        "BODY=\"${BODY}## Diff stat\\n\\n\"\n"
+        "BODY=\"${BODY}\\`\\`\\`\\n$(git diff $BASE --stat)\\n\\`\\`\\`\"\n"
+        "\n"
+        "gh pr create --title \"$TITLE\" --body \"$(echo -e \"$BODY\")\"\n"
+    );
+
+    runAsync(QStringLiteral("pr"), worktreePath,
+             QStringLiteral("bash"), {QStringLiteral("-c"), script});
 }
 
 void WorktreeManager::mergePullRequest(const QString &worktreePath)
