@@ -28,6 +28,7 @@ Inspired by [Conductor](https://www.conductor.build) for macOS.
 **PR & merge workflow**
 - Push branches to remote
 - One-click PR creation (GitHub via `gh`, Gitea/others via browser)
+- Auto-generated PR title and description from commit history using Claude Haiku
 - Local merge with auto-commit of uncommitted worktree changes
 - Workspace archival with worktree cleanup
 - Forge auto-detection (GitHub, Gitea, GitLab)
