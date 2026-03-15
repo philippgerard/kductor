@@ -32,6 +32,7 @@ Q_SIGNALS:
 private:
     GitManager *m_gitManager;
     Workspace m_lastCreated;
-    QString generateWorktreeName(const QString &workspaceName) const;
-    QString generateBranchName(const QString &workspaceName) const;
+    QString generateSuffix() const;
+    QString generateWorktreeName(const QString &workspaceName, const QString &suffix) const;
+    QString generateBranchName(const QString &workspaceName, const QString &suffix) const;
 };

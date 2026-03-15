@@ -9,23 +9,39 @@ Kirigami.Dialog {
     id: createDialog
 
     title: i18n("New Workspace")
-    standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
     preferredWidth: Kirigami.Units.gridUnit * 25
 
     signal accepted()
 
     property string selectedRepo: ""
     property var branches: []
+    property string errorMessage: ""
 
     onOpened: {
         nameField.text = "";
         repoPathField.text = "";
         selectedRepo = "";
         branchCombo.model = [];
+        errorMessage = "";
+        nameField.forceActiveFocus();
+    }
+
+    Connections {
+        target: WorktreeManager
+        function onErrorOccurred(message) {
+            errorMessage = message;
+        }
     }
 
     ColumnLayout {
         spacing: Kirigami.Units.largeSpacing
+
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            type: Kirigami.MessageType.Error
+            text: errorMessage
+            visible: errorMessage.length > 0
+        }
 
         Kirigami.FormLayout {
             QQC2.TextField {
@@ -80,43 +96,19 @@ Kirigami.Dialog {
         }
     }
 
-    onRejected: close()
-
-    Component.onCompleted: {
-        // Connect the OK button
-        let okButton = standardButton(Kirigami.Dialog.Ok);
-    }
-
-    function doAccept() {
-        if (nameField.text.length === 0 || selectedRepo.length === 0) {
-            return;
-        }
-
-        let branch = branchCombo.currentText || "main";
-        let success = WorktreeManager.createWorkspace(nameField.text, selectedRepo, branch);
-
-        if (success) {
-            accepted();
-            close();
-        }
-    }
-
-    // Override the Ok button behavior
-    onClosed: {}
-    Component.onDestruction: {}
-
-    footer: QQC2.DialogButtonBox {
-        QQC2.Button {
-            text: i18n("Cancel")
-            QQC2.DialogButtonBox.buttonRole: QQC2.DialogButtonBox.RejectRole
-            onClicked: createDialog.close()
-        }
-        QQC2.Button {
+    customFooterActions: [
+        Kirigami.Action {
             text: i18n("Create")
             icon.name: "list-add-symbolic"
-            QQC2.DialogButtonBox.buttonRole: QQC2.DialogButtonBox.AcceptRole
             enabled: nameField.text.length > 0 && selectedRepo.length > 0
-            onClicked: createDialog.doAccept()
+            onTriggered: {
+                let branch = branchCombo.currentText || "main";
+                let success = WorktreeManager.createWorkspace(nameField.text, selectedRepo, branch);
+                if (success) {
+                    createDialog.accepted();
+                    createDialog.close();
+                }
+            }
         }
-    }
+    ]
 }

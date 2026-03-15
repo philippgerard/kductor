@@ -48,6 +48,10 @@ int main(int argc, char *argv[])
     auto *workspaceModel = new WorkspaceModel(worktreeManager, &app);
     auto *agentManager = new AgentManager(&app);
 
+    QObject::connect(worktreeManager, &WorktreeManager::workspaceCreated, workspaceModel, [=](const QString &) {
+        workspaceModel->addWorkspace(worktreeManager->lastCreatedWorkspace());
+    });
+
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextObject(new KLocalizedContext(&engine));
     engine.rootContext()->setContextProperty(QStringLiteral("GitManager"), gitManager);

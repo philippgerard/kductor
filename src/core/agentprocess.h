@@ -57,6 +57,7 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void onReadyRead();
+    void onReadyReadStderr();
     void onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void onProcessError(QProcess::ProcessError error);
 

@@ -33,7 +33,8 @@ public:
     Q_INVOKABLE QStringList listBranches() const;
     Q_INVOKABLE QString currentBranch() const;
 
-    Q_INVOKABLE bool createWorktree(const QString &name, const QString &path, const QString &branchName);
+    Q_INVOKABLE bool createWorktree(const QString &name, const QString &path,
+                                     const QString &branchName, const QString &sourceBranch);
     Q_INVOKABLE QStringList listWorktrees() const;
     Q_INVOKABLE bool removeWorktree(const QString &name);
 
@@ -41,6 +42,7 @@ public:
     Q_INVOKABLE QVariantList getDiff() const;
 
     git_repository *repo() const { return m_repo.get(); }
+    QString lastError() const { return m_lastError; }
 
 Q_SIGNALS:
     void repositoryChanged();
@@ -49,7 +51,8 @@ Q_SIGNALS:
 private:
     GitRepoPtr m_repo;
     QString m_repoPath;
+    QString m_lastError;
 
     bool createBranch(const QString &name, const QString &fromRef);
-    void emitGitError(const QString &context);
+    void setError(const QString &context);
 };

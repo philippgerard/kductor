@@ -24,7 +24,7 @@ bool GitManager::openRepository(const QString &path)
     git_repository *repo = nullptr;
     int err = git_repository_open(&repo, path.toUtf8().constData());
     if (err < 0) {
-        emitGitError(QStringLiteral("Failed to open repository"));
+        setError(QStringLiteral("Failed to open repository"));
         return false;
     }
 
@@ -106,14 +106,14 @@ bool GitManager::createBranch(const QString &name, const QString &fromRef)
     git_object *target = nullptr;
 
     if (git_revparse_single(&target, m_repo.get(), fromRef.toUtf8().constData()) < 0) {
-        emitGitError(QStringLiteral("Failed to resolve reference: %1").arg(fromRef));
+        setError(QStringLiteral("Failed to resolve branch '%1'").arg(fromRef));
         return false;
     }
 
     git_commit *commit = nullptr;
     if (git_commit_lookup(&commit, m_repo.get(), git_object_id(target)) < 0) {
         git_object_free(target);
-        emitGitError(QStringLiteral("Failed to lookup commit"));
+        setError(QStringLiteral("Failed to lookup commit for '%1'").arg(fromRef));
         return false;
     }
 
@@ -122,7 +122,7 @@ bool GitManager::createBranch(const QString &name, const QString &fromRef)
     git_object_free(target);
 
     if (err < 0) {
-        emitGitError(QStringLiteral("Failed to create branch: %1").arg(name));
+        setError(QStringLiteral("Failed to create branch '%1'").arg(name));
         return false;
     }
 
@@ -130,21 +130,26 @@ bool GitManager::createBranch(const QString &name, const QString &fromRef)
     return true;
 }
 
-bool GitManager::createWorktree(const QString &name, const QString &path, const QString &branchName)
+bool GitManager::createWorktree(const QString &name, const QString &path,
+                                const QString &branchName, const QString &sourceBranch)
 {
     if (!m_repo)
         return false;
 
-    QString sourceBranch = currentBranch();
-    if (sourceBranch.isEmpty())
-        sourceBranch = QStringLiteral("HEAD");
+    // Use provided source branch, fall back to current branch or HEAD
+    QString base = sourceBranch;
+    if (base.isEmpty()) {
+        base = currentBranch();
+        if (base.isEmpty())
+            base = QStringLiteral("HEAD");
+    }
 
-    if (!createBranch(branchName, sourceBranch))
+    if (!createBranch(branchName, base))
         return false;
 
     git_reference *branchRef = nullptr;
     if (git_branch_lookup(&branchRef, m_repo.get(), branchName.toUtf8().constData(), GIT_BRANCH_LOCAL) < 0) {
-        emitGitError(QStringLiteral("Failed to lookup created branch"));
+        setError(QStringLiteral("Failed to lookup created branch '%1'").arg(branchName));
         return false;
     }
 
@@ -157,7 +162,7 @@ bool GitManager::createWorktree(const QString &name, const QString &path, const 
     git_reference_free(branchRef);
 
     if (err < 0) {
-        emitGitError(QStringLiteral("Failed to create worktree"));
+        setError(QStringLiteral("Failed to add worktree at '%1'").arg(path));
         return false;
     }
 
@@ -189,7 +194,7 @@ bool GitManager::removeWorktree(const QString &name)
 
     git_worktree *wt = nullptr;
     if (git_worktree_lookup(&wt, m_repo.get(), name.toUtf8().constData()) < 0) {
-        emitGitError(QStringLiteral("Failed to lookup worktree: %1").arg(name));
+        setError(QStringLiteral("Failed to lookup worktree: %1").arg(name));
         return false;
     }
 
@@ -200,7 +205,7 @@ bool GitManager::removeWorktree(const QString &name)
     git_worktree_free(wt);
 
     if (err < 0) {
-        emitGitError(QStringLiteral("Failed to prune worktree: %1").arg(name));
+        setError(QStringLiteral("Failed to prune worktree: %1").arg(name));
         return false;
     }
 
@@ -266,12 +271,12 @@ QVariantList GitManager::getDiff() const
     return result;
 }
 
-void GitManager::emitGitError(const QString &context)
+void GitManager::setError(const QString &context)
 {
     const git_error *err = git_error_last();
-    QString msg = context;
+    m_lastError = context;
     if (err && err->message) {
-        msg += QStringLiteral(": ") + QString::fromUtf8(err->message);
+        m_lastError += QStringLiteral(": ") + QString::fromUtf8(err->message);
     }
-    Q_EMIT errorOccurred(msg);
+    Q_EMIT errorOccurred(m_lastError);
 }

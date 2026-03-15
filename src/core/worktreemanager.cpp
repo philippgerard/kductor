@@ -2,6 +2,8 @@
 #include "gitmanager.h"
 
 #include <QDir>
+#include <QFileInfo>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QUuid>
 
@@ -16,21 +18,25 @@ QString WorktreeManager::worktreeBasePath() const
     return QDir::homePath() + QStringLiteral("/.kductor/worktrees");
 }
 
-QString WorktreeManager::generateWorktreeName(const QString &workspaceName) const
+QString WorktreeManager::generateSuffix() const
+{
+    return QUuid::createUuid().toString(QUuid::WithoutBraces).left(8);
+}
+
+QString WorktreeManager::generateWorktreeName(const QString &workspaceName, const QString &suffix) const
 {
     QString clean = workspaceName.toLower();
     clean.replace(QRegularExpression(QStringLiteral("[^a-z0-9]+")), QStringLiteral("-"));
     clean.truncate(30);
-    QString shortId = QUuid::createUuid().toString(QUuid::WithoutBraces).left(8);
-    return QStringLiteral("kductor-%1-%2").arg(clean, shortId);
+    return QStringLiteral("kductor-%1-%2").arg(clean, suffix);
 }
 
-QString WorktreeManager::generateBranchName(const QString &workspaceName) const
+QString WorktreeManager::generateBranchName(const QString &workspaceName, const QString &suffix) const
 {
     QString clean = workspaceName.toLower();
     clean.replace(QRegularExpression(QStringLiteral("[^a-z0-9]+")), QStringLiteral("-"));
     clean.truncate(40);
-    return QStringLiteral("kductor/%1").arg(clean);
+    return QStringLiteral("kductor/%1-%2").arg(clean, suffix);
 }
 
 bool WorktreeManager::createWorkspace(const QString &name, const QString &repoPath,
@@ -41,8 +47,9 @@ bool WorktreeManager::createWorkspace(const QString &name, const QString &repoPa
         return false;
     }
 
-    QString wtName = generateWorktreeName(name);
-    QString branchName = generateBranchName(name);
+    QString suffix = generateSuffix();
+    QString wtName = generateWorktreeName(name, suffix);
+    QString branchName = generateBranchName(name, suffix);
 
     QFileInfo repoInfo(repoPath);
     QString wtPath = worktreeBasePath() + QStringLiteral("/")
@@ -50,8 +57,8 @@ bool WorktreeManager::createWorkspace(const QString &name, const QString &repoPa
 
     QDir().mkpath(QFileInfo(wtPath).absolutePath());
 
-    if (!m_gitManager->createWorktree(wtName, wtPath, branchName)) {
-        Q_EMIT errorOccurred(QStringLiteral("Failed to create worktree"));
+    if (!m_gitManager->createWorktree(wtName, wtPath, branchName, sourceBranch)) {
+        Q_EMIT errorOccurred(m_gitManager->lastError());
         return false;
     }
 

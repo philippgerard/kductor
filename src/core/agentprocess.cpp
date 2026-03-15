@@ -1,7 +1,32 @@
 #include "agentprocess.h"
 
+#include <QDir>
+#include <QFile>
 #include <QJsonDocument>
 #include <QJsonArray>
+#include <QProcessEnvironment>
+#include <QStandardPaths>
+
+static QString findClaude()
+{
+    // Check common locations for the claude binary
+    QStringList candidates = {
+        QDir::homePath() + QStringLiteral("/.local/bin/claude"),
+        QDir::homePath() + QStringLiteral("/.npm/bin/claude"),
+        QStringLiteral("/usr/local/bin/claude"),
+        QStringLiteral("/usr/bin/claude"),
+    };
+    for (const auto &path : candidates) {
+        if (QFile::exists(path))
+            return path;
+    }
+    // Fall back to PATH lookup
+    QString found = QStandardPaths::findExecutable(QStringLiteral("claude"));
+    if (!found.isEmpty())
+        return found;
+    // Last resort
+    return QStringLiteral("claude");
+}
 
 AgentProcess::AgentProcess(QObject *parent)
     : QObject(parent)
@@ -9,8 +34,18 @@ AgentProcess::AgentProcess(QObject *parent)
     , m_agentId(QUuid::createUuid().toString(QUuid::WithoutBraces))
 {
     connect(m_process, &QProcess::readyReadStandardOutput, this, &AgentProcess::onReadyRead);
+    connect(m_process, &QProcess::readyReadStandardError, this, &AgentProcess::onReadyReadStderr);
     connect(m_process, &QProcess::finished, this, &AgentProcess::onProcessFinished);
     connect(m_process, &QProcess::errorOccurred, this, &AgentProcess::onProcessError);
+
+    // Ensure ~/.local/bin is in PATH for the subprocess
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    QString path = env.value(QStringLiteral("PATH"));
+    QString localBin = QDir::homePath() + QStringLiteral("/.local/bin");
+    if (!path.contains(localBin)) {
+        env.insert(QStringLiteral("PATH"), localBin + QStringLiteral(":") + path);
+    }
+    m_process->setProcessEnvironment(env);
 }
 
 AgentProcess::~AgentProcess()
@@ -42,10 +77,15 @@ void AgentProcess::start(const QString &workingDir, const QString &prompt, const
     setStatus(Starting);
     m_buffer.clear();
 
+    QString program = findClaude();
+    QStringList args = buildArgs(prompt, model, false);
+
     m_process->setWorkingDirectory(workingDir);
-    m_process->setProgram(QStringLiteral("claude"));
-    m_process->setArguments(buildArgs(prompt, model, false));
+    m_process->setProgram(program);
+    m_process->setArguments(args);
+
     m_process->start();
+    m_process->closeWriteChannel();
 }
 
 void AgentProcess::resume(const QString &workingDir, const QString &prompt, const QString &model)
@@ -61,9 +101,18 @@ void AgentProcess::resume(const QString &workingDir, const QString &prompt, cons
     m_buffer.clear();
 
     m_process->setWorkingDirectory(workingDir);
-    m_process->setProgram(QStringLiteral("claude"));
+    m_process->setProgram(findClaude());
     m_process->setArguments(buildArgs(prompt, model, true));
     m_process->start();
+    m_process->closeWriteChannel();
+}
+
+void AgentProcess::onReadyReadStderr()
+{
+    QByteArray data = m_process->readAllStandardError();
+    if (!data.isEmpty()) {
+        Q_EMIT errorOccurred(QString::fromUtf8(data.trimmed()));
+    }
 }
 
 void AgentProcess::stop()

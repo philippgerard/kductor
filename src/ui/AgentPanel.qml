@@ -10,44 +10,40 @@ ColumnLayout {
     required property string agentId
     required property string workingDir
 
-    property var agent: agentId ? AgentManager.getAgent(agentId) : null
+    property int agentStatus: 0
+    property string agentActivity: ""
+    property double agentCost: 0.0
 
     AgentOutputModel {
         id: outputModel
     }
 
     Connections {
-        target: agent
-        enabled: agent !== null
+        target: AgentManager
 
-        function onAssistantText(text) {
-            outputModel.appendText(text);
+        function onAgentStatusChanged(id, status) {
+            if (id === agentPanel.agentId)
+                agentPanel.agentStatus = status;
         }
-        function onThinkingText(thought) {
-            outputModel.appendThinking(thought);
+        function onAgentActivityChanged(id, activity) {
+            if (id === agentPanel.agentId)
+                agentPanel.agentActivity = activity;
         }
-        function onToolUse(toolName, input) {
-            let summary = toolName;
-            if (input && input.command) {
-                summary += ": " + input.command;
-            } else if (input && input.pattern) {
-                summary += ": " + input.pattern;
-            } else if (input && input.file_path) {
-                summary += ": " + input.file_path;
+        function onAgentCostChanged(id, cost) {
+            if (id === agentPanel.agentId)
+                agentPanel.agentCost = cost;
+        }
+        function onAgentOutput(id, lineType, content, toolName) {
+            if (id !== agentPanel.agentId)
+                return;
+            switch (lineType) {
+            case 0: outputModel.appendText(content); break;
+            case 1: outputModel.appendThinking(content); break;
+            case 2: outputModel.appendToolUse(toolName, content); break;
+            case 3: outputModel.appendToolResult(toolName, content); break;
+            case 4: outputModel.appendSystem(content); break;
+            case 5: outputModel.appendError(content); break;
             }
-            outputModel.appendToolUse(toolName, summary);
-        }
-        function onToolResult(toolName, output) {
-            outputModel.appendToolResult(toolName, output);
-        }
-        function onErrorOccurred(error) {
-            outputModel.appendError(error);
-        }
-        function onInitialized(info) {
-            outputModel.appendSystem(i18n("Agent initialized (session: %1)", info.session_id || ""));
-        }
-        function onResultReady(result) {
-            outputModel.appendSystem(i18n("Agent completed. Cost: $%1", agent.totalCost.toFixed(4)));
         }
     }
 
@@ -57,11 +53,11 @@ ColumnLayout {
         Layout.margins: Kirigami.Units.smallSpacing
 
         StatusBadge {
-            status: agent ? agent.status : 0
+            status: agentPanel.agentStatus
         }
 
         QQC2.Label {
-            text: agent ? agent.currentActivity : i18n("Idle")
+            text: agentPanel.agentActivity || i18n("Idle")
             elide: Text.ElideRight
             Layout.fillWidth: true
             opacity: 0.7
@@ -69,8 +65,8 @@ ColumnLayout {
         }
 
         QQC2.Label {
-            visible: agent && agent.totalCost > 0
-            text: agent ? "$" + agent.totalCost.toFixed(4) : ""
+            visible: agentPanel.agentCost > 0
+            text: "$" + agentPanel.agentCost.toFixed(4)
             opacity: 0.6
             font.family: "monospace"
         }
@@ -78,7 +74,7 @@ ColumnLayout {
         QQC2.Button {
             icon.name: "media-playback-stop-symbolic"
             text: i18n("Stop")
-            visible: agent && agent.status === 2 // Running
+            visible: agentPanel.agentStatus === 2 // Running
             flat: true
             onClicked: AgentManager.stopAgent(agentPanel.agentId)
         }
@@ -99,13 +95,18 @@ ColumnLayout {
         Layout.fillWidth: true
     }
 
-    // Command bar
+    // Command bar - always active
     CommandBar {
         Layout.fillWidth: true
-        enabled: agent !== null
         onPromptSubmitted: function(prompt) {
-            AgentManager.sendPrompt(agentPanel.agentId, agentPanel.workingDir, prompt, "sonnet");
             outputModel.appendSystem(i18n("You: %1", prompt));
+            if (agentPanel.agentStatus === 0) {
+                // Idle - start the agent with this prompt
+                AgentManager.startAgent(agentPanel.agentId, agentPanel.workingDir, prompt, "sonnet");
+            } else {
+                // Already started - send follow-up prompt
+                AgentManager.sendPrompt(agentPanel.agentId, agentPanel.workingDir, prompt, "sonnet");
+            }
         }
     }
 }

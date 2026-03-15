@@ -15,14 +15,18 @@ Kirigami.Page {
 
     title: workspaceName
 
-    property var currentAgentId: null
+    property string currentAgentId: ""
     property var agentIds: []
 
     actions: [
         Kirigami.Action {
             text: i18n("Add Agent")
             icon.name: "list-add-symbolic"
-            onTriggered: addAgentSheet.open()
+            onTriggered: {
+                let agentId = AgentManager.createAgent(workspacePage.workspaceId);
+                agentIds = [...agentIds, agentId];
+                currentAgentId = agentId;
+            }
         }
     ]
 
@@ -36,7 +40,11 @@ Kirigami.Page {
         helpfulAction: Kirigami.Action {
             text: i18n("Add Agent")
             icon.name: "list-add-symbolic"
-            onTriggered: addAgentSheet.open()
+            onTriggered: {
+                let agentId = AgentManager.createAgent(workspacePage.workspaceId);
+                agentIds = [...agentIds, agentId];
+                currentAgentId = agentId;
+            }
         }
     }
 
@@ -57,9 +65,8 @@ Kirigami.Page {
                     required property string modelData
                     required property int index
                     text: i18n("Agent %1", index + 1)
-                    onClicked: {
-                        currentAgentId = modelData;
-                    }
+                    checked: currentAgentId === modelData
+                    onClicked: currentAgentId = modelData
                 }
             }
         }
@@ -68,8 +75,8 @@ Kirigami.Page {
         AgentPanel {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            visible: currentAgentId !== null
-            agentId: currentAgentId || ""
+            visible: currentAgentId.length > 0
+            agentId: currentAgentId
             workingDir: worktreePath
         }
     }
@@ -104,60 +111,6 @@ Kirigami.Page {
             QQC2.Label {
                 text: i18np("%1 agent", "%1 agents", agentIds.length)
                 opacity: 0.7
-            }
-        }
-    }
-
-    Kirigami.Dialog {
-        id: addAgentSheet
-        title: i18n("Add Agent")
-        preferredWidth: Kirigami.Units.gridUnit * 25
-
-        ColumnLayout {
-            spacing: Kirigami.Units.largeSpacing
-
-            Kirigami.FormLayout {
-                QQC2.TextArea {
-                    id: promptField
-                    Kirigami.FormData.label: i18n("Prompt:")
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Kirigami.Units.gridUnit * 8
-                    placeholderText: i18n("What should the agent work on?")
-                    wrapMode: TextEdit.Wrap
-                }
-
-                QQC2.ComboBox {
-                    id: modelCombo
-                    Kirigami.FormData.label: i18n("Model:")
-                    model: ["sonnet", "opus", "haiku"]
-                    currentIndex: 0
-                }
-            }
-        }
-
-        footer: QQC2.DialogButtonBox {
-            QQC2.Button {
-                text: i18n("Cancel")
-                QQC2.DialogButtonBox.buttonRole: QQC2.DialogButtonBox.RejectRole
-                onClicked: addAgentSheet.close()
-            }
-            QQC2.Button {
-                text: i18n("Start Agent")
-                icon.name: "media-playback-start-symbolic"
-                QQC2.DialogButtonBox.buttonRole: QQC2.DialogButtonBox.AcceptRole
-                enabled: promptField.text.length > 0
-                onClicked: {
-                    let agentId = AgentManager.spawnAgent(
-                        workspacePage.workspaceId,
-                        workspacePage.worktreePath,
-                        promptField.text,
-                        modelCombo.currentText
-                    );
-                    agentIds = [...agentIds, agentId];
-                    currentAgentId = agentId;
-                    addAgentSheet.close();
-                    promptField.text = "";
-                }
             }
         }
     }

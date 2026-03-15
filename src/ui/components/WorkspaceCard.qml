@@ -93,8 +93,6 @@ Kirigami.AbstractCard {
         }
     }
 
-    onClicked: card.clicked()
-
     HoverHandler {
         id: hoverHandler
         cursorShape: Qt.PointingHandCursor
