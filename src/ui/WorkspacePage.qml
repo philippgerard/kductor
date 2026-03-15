@@ -68,30 +68,22 @@ Kirigami.Page {
         target: WorktreeManager
         function onOperationStarted(op) {
             operationBusy = true;
-            statusMessage.type = Kirigami.MessageType.Information;
-            statusMessage.text = i18n("Running…");
-            statusMessage.visible = true;
+            statusMessage.visible = false;
         }
         function onOperationSucceeded(op, result) {
             operationBusy = false;
-            statusMessage.type = Kirigami.MessageType.Positive;
-            if (op === "push") {
-                statusMessage.text = i18n("Branch pushed to remote.");
-            } else if (op === "pr") {
-                statusMessage.text = result || i18n("Pull request created.");
-            } else if (op === "merge-pr") {
-                statusMessage.text = i18n("Pull request merged.");
-                WorkspaceModel.updateStatus(workspaceId, 2); // Completed
-            } else if (op === "merge") {
-                statusMessage.text = i18n("Merged into %1.", sourceBranch);
-                WorkspaceModel.updateStatus(workspaceId, 2); // Completed
-            } else if (op === "archive") {
-                statusMessage.visible = false;
+            if (op === "archive") {
                 WorkspaceModel.remove(workspaceId);
                 applicationWindow().pageStack.pop();
+                applicationWindow().showPassiveNotification(i18n("Workspace archived."));
                 return;
             }
-            statusMessage.visible = true;
+            let msg = "";
+            if (op === "push") msg = i18n("Branch pushed.");
+            else if (op === "pr") msg = result || i18n("Pull request created.");
+            else if (op === "merge-pr") { msg = i18n("Pull request merged."); WorkspaceModel.updateStatus(workspaceId, 2); }
+            else if (op === "merge") { msg = i18n("Merged into %1.", sourceBranch); WorkspaceModel.updateStatus(workspaceId, 2); }
+            applicationWindow().showPassiveNotification(msg, 4000);
         }
         function onOperationFailed(op, error) {
             operationBusy = false;
