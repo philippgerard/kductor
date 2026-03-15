@@ -28,6 +28,8 @@ public:
     Q_INVOKABLE void mergePullRequest(const QString &worktreePath);
     Q_INVOKABLE void mergeToSource(const QString &repoPath, const QString &branchName, const QString &sourceBranch);
     Q_INVOKABLE void archiveWorkspace(const QString &worktreePath, const QString &repoPath);
+    Q_INVOKABLE QString detectForge(const QString &worktreePath) const; // "github", "gitea", or "unknown"
+    Q_INVOKABLE QString remoteWebUrl(const QString &worktreePath) const;
 
     Workspace lastCreatedWorkspace() const { return m_lastCreated; }
 

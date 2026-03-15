@@ -21,8 +21,12 @@ Kirigami.Page {
     property int nextAgentNumber: 1
     property bool showingDiff: false
     property bool operationBusy: false
+    property string forge: ""
+    property string webUrl: ""
 
     Component.onCompleted: {
+        forge = WorktreeManager.detectForge(worktreePath);
+        webUrl = WorktreeManager.remoteWebUrl(worktreePath);
         let existing = AgentManager.agentsForWorkspace(workspaceId);
         if (existing.length > 0) {
             let restored = [];
@@ -110,10 +114,16 @@ Kirigami.Page {
             }
         },
         Kirigami.Action {
-            text: i18n("Push & PR")
+            text: forge === "github" ? i18n("Push & PR") : i18n("Push")
             icon.name: "vcs-push"
             enabled: !operationBusy
-            onTriggered: pushThenPR()
+            onTriggered: {
+                if (forge === "github") {
+                    pushThenPR();
+                } else {
+                    pushThenOpenWeb();
+                }
+            }
         },
         Kirigami.Action {
             text: i18n("Merge")
@@ -121,8 +131,9 @@ Kirigami.Page {
             enabled: !operationBusy
             children: [
                 Kirigami.Action {
-                    text: i18n("Merge PR (GitHub)")
+                    text: i18n("Merge PR (remote)")
                     icon.name: "vcs-merge"
+                    visible: forge === "github"
                     enabled: !operationBusy
                     onTriggered: mergePrDialog.open()
                 },
@@ -266,6 +277,25 @@ Kirigami.Page {
     }
 
     // --- Dialogs ---
+
+    function pushThenOpenWeb() {
+        function onDone(op, result) {
+            if (op !== "push") return;
+            WorktreeManager.operationSucceeded.disconnect(onDone);
+            WorktreeManager.operationFailed.disconnect(onFail);
+            // Open web UI to create PR
+            let prUrl = webUrl + "/compare/" + sourceBranch + "..." + branchName;
+            Qt.openUrlExternally(prUrl);
+        }
+        function onFail(op, error) {
+            if (op !== "push") return;
+            WorktreeManager.operationSucceeded.disconnect(onDone);
+            WorktreeManager.operationFailed.disconnect(onFail);
+        }
+        WorktreeManager.operationSucceeded.connect(onDone);
+        WorktreeManager.operationFailed.connect(onFail);
+        WorktreeManager.pushBranch(worktreePath);
+    }
 
     function pushThenPR() {
         function onPushDone(op, result) {

@@ -185,10 +185,61 @@ void WorktreeManager::mergeToSource(const QString &repoPath, const QString &bran
 
 void WorktreeManager::archiveWorkspace(const QString &worktreePath, const QString &repoPath)
 {
-    // Remove worktree directory and prune
     QDir(worktreePath).removeRecursively();
 
     runAsync(QStringLiteral("archive"), repoPath,
              QStringLiteral("git"),
              {QStringLiteral("worktree"), QStringLiteral("prune")});
+}
+
+QString WorktreeManager::detectForge(const QString &worktreePath) const
+{
+    QProcess proc;
+    proc.setWorkingDirectory(worktreePath);
+    proc.start(QStringLiteral("git"), {QStringLiteral("remote"), QStringLiteral("get-url"), QStringLiteral("origin")});
+    if (!proc.waitForFinished(5000))
+        return QStringLiteral("unknown");
+
+    QString url = QString::fromUtf8(proc.readAllStandardOutput()).trimmed().toLower();
+    if (url.contains(QStringLiteral("github.com")))
+        return QStringLiteral("github");
+    if (url.contains(QStringLiteral("gitea")) || url.contains(QStringLiteral("forgejo")))
+        return QStringLiteral("gitea");
+    if (url.contains(QStringLiteral("gitlab")))
+        return QStringLiteral("gitlab");
+    // If it has a remote but not a known forge, assume self-hosted
+    if (!url.isEmpty())
+        return QStringLiteral("other");
+    return QStringLiteral("unknown");
+}
+
+QString WorktreeManager::remoteWebUrl(const QString &worktreePath) const
+{
+    QProcess proc;
+    proc.setWorkingDirectory(worktreePath);
+    proc.start(QStringLiteral("git"), {QStringLiteral("remote"), QStringLiteral("get-url"), QStringLiteral("origin")});
+    if (!proc.waitForFinished(5000))
+        return {};
+
+    QString url = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+
+    // Convert SSH URL to HTTPS: ssh://git@host:port/user/repo.git -> https://host/user/repo
+    if (url.startsWith(QStringLiteral("ssh://"))) {
+        url.remove(0, 6); // remove ssh://
+        url.replace(QRegularExpression(QStringLiteral("^[^@]*@")), QString()); // remove user@
+        url.replace(QRegularExpression(QStringLiteral(":\\d+")), QString()); // remove :port
+        url = QStringLiteral("https://") + url;
+    }
+    // Convert git@host:user/repo.git -> https://host/user/repo
+    else if (url.startsWith(QStringLiteral("git@"))) {
+        url.remove(0, 4);
+        url.replace(QLatin1Char(':'), QLatin1Char('/'));
+        url = QStringLiteral("https://") + url;
+    }
+
+    // Remove .git suffix
+    if (url.endsWith(QStringLiteral(".git")))
+        url.chop(4);
+
+    return url;
 }
