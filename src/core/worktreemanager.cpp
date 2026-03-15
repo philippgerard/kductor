@@ -155,27 +155,42 @@ void WorktreeManager::createPullRequest(const QString &worktreePath, const QStri
     Q_UNUSED(title)
     Q_UNUSED(body)
 
-    // Build a good PR title and body from the branch's commits
-    // Title: first commit subject (most descriptive), fallback to branch name
-    // Body: all commit messages + diff stat
+    // Use Claude Haiku to generate a good PR title and body from the diff,
+    // then create the PR with gh
+    QString claudePath = QStandardPaths::findExecutable(QStringLiteral("claude"));
+    if (claudePath.isEmpty()) {
+        QStringList candidates = {
+            QDir::homePath() + QStringLiteral("/.local/bin/claude"),
+            QStringLiteral("/usr/local/bin/claude"),
+        };
+        for (const auto &c : candidates) {
+            if (QFile::exists(c)) { claudePath = c; break; }
+        }
+    }
+
     QString script = QStringLiteral(
         "set -e\n"
         "BASE=$(git merge-base HEAD $(git rev-parse --abbrev-ref HEAD@{upstream} 2>/dev/null || echo main) 2>/dev/null || git rev-list --max-parents=0 HEAD)\n"
-        "COMMIT_COUNT=$(git rev-list --count $BASE..HEAD 2>/dev/null || echo 0)\n"
+        "CONTEXT=\"Commits:\\n$(git log $BASE..HEAD --format='- %%s' --reverse)\\n\\nDiff stat:\\n$(git diff $BASE --stat)\\n\\nSample changes:\\n$(git diff $BASE --no-color | head -200)\"\n"
         "\n"
-        "if [ \"$COMMIT_COUNT\" -le 1 ]; then\n"
-        "  TITLE=$(git log -1 --format='%%s')\n"
-        "else\n"
-        "  TITLE=$(git log $BASE..HEAD --format='%%s' | tail -1)\n"
+        "PROMPT=\"Based on these git changes, write a pull request title and markdown body. "
+        "Format your response exactly as:\\nTITLE: <concise title under 72 chars>\\nBODY:\\n<markdown body with a summary section and key changes>\"\n"
+        "\n"
+        "RESULT=$('%1' -p \"$PROMPT\\n\\n$CONTEXT\" --model haiku --output-format text 2>/dev/null)\n"
+        "\n"
+        "PR_TITLE=$(echo \"$RESULT\" | grep '^TITLE:' | head -1 | sed 's/^TITLE: *//')\n"
+        "PR_BODY=$(echo \"$RESULT\" | sed -n '/^BODY:/,$ p' | tail -n +2)\n"
+        "\n"
+        "# Fallback if Claude didn't respond properly\n"
+        "if [ -z \"$PR_TITLE\" ]; then\n"
+        "  PR_TITLE=$(git log -1 --format='%%s')\n"
+        "fi\n"
+        "if [ -z \"$PR_BODY\" ]; then\n"
+        "  PR_BODY=$(git log $BASE..HEAD --format='- %%s' --reverse)\n"
         "fi\n"
         "\n"
-        "BODY=\"## Changes\\n\\n\"\n"
-        "BODY=\"${BODY}$(git log $BASE..HEAD --format='- %%s' --reverse)\\n\\n\"\n"
-        "BODY=\"${BODY}## Diff stat\\n\\n\"\n"
-        "BODY=\"${BODY}\\`\\`\\`\\n$(git diff $BASE --stat)\\n\\`\\`\\`\"\n"
-        "\n"
-        "gh pr create --title \"$TITLE\" --body \"$(echo -e \"$BODY\")\"\n"
-    );
+        "gh pr create --title \"$PR_TITLE\" --body \"$PR_BODY\"\n"
+    ).arg(claudePath);
 
     runAsync(QStringLiteral("pr"), worktreePath,
              QStringLiteral("bash"), {QStringLiteral("-c"), script});
