@@ -121,7 +121,7 @@ Kirigami.Page {
             text: i18n("Push & PR")
             icon.name: "vcs-push"
             enabled: !operationBusy
-            onTriggered: prDialog.open()
+            onTriggered: pushThenPR()
         },
         Kirigami.Action {
             text: i18n("Merge")
@@ -275,51 +275,12 @@ Kirigami.Page {
 
     // --- Dialogs ---
 
-    // PR creation — uses Kirigami.Dialog with proper sizing
-    Kirigami.Dialog {
-        id: prDialog
-        title: i18n("Create Pull Request")
-        preferredWidth: Kirigami.Units.gridUnit * 30
-        padding: Kirigami.Units.largeSpacing
-
-        Kirigami.FormLayout {
-            QQC2.TextField {
-                id: prTitleField
-                Kirigami.FormData.label: i18n("Title:")
-                text: workspaceName
-            }
-
-            QQC2.TextArea {
-                id: prBodyField
-                Kirigami.FormData.label: i18n("Description:")
-                Layout.fillWidth: true
-                Layout.preferredHeight: Kirigami.Units.gridUnit * 8
-                placeholderText: i18n("Describe the changes…")
-                wrapMode: TextEdit.Wrap
-            }
-        }
-
-        customFooterActions: [
-            Kirigami.Action {
-                text: i18n("Push & Create PR")
-                icon.name: "vcs-push"
-                enabled: prTitleField.text.length > 0 && !operationBusy
-                onTriggered: {
-                    prDialog.close();
-                    let title = prTitleField.text;
-                    let body = prBodyField.text;
-                    pushThenPR(title, body);
-                }
-            }
-        ]
-    }
-
-    function pushThenPR(title, body) {
+    function pushThenPR() {
         function onPushDone(op, result) {
             if (op !== "push") return;
             WorktreeManager.operationSucceeded.disconnect(onPushDone);
             WorktreeManager.operationFailed.disconnect(onPushFail);
-            WorktreeManager.createPullRequest(worktreePath, title, body);
+            WorktreeManager.createPullRequest(worktreePath, workspaceName, "");
         }
         function onPushFail(op, error) {
             if (op !== "push") return;

@@ -132,12 +132,14 @@ void WorktreeManager::pushBranch(const QString &worktreePath)
 
 void WorktreeManager::createPullRequest(const QString &worktreePath, const QString &title, const QString &body)
 {
-    runAsync(QStringLiteral("pr"), worktreePath,
-             QStringLiteral("gh"),
-             {QStringLiteral("pr"), QStringLiteral("create"),
-              QStringLiteral("--title"), title,
-              QStringLiteral("--body"), body,
-              QStringLiteral("--fill-verbose")});
+    QStringList args = {QStringLiteral("pr"), QStringLiteral("create")};
+    if (!title.isEmpty())
+        args << QStringLiteral("--title") << title;
+    if (!body.isEmpty())
+        args << QStringLiteral("--body") << body;
+    else
+        args << QStringLiteral("--fill-verbose");
+    runAsync(QStringLiteral("pr"), worktreePath, QStringLiteral("gh"), args);
 }
 
 void WorktreeManager::mergePullRequest(const QString &worktreePath)
@@ -150,9 +152,14 @@ void WorktreeManager::mergePullRequest(const QString &worktreePath)
 
 void WorktreeManager::mergeToSource(const QString &repoPath, const QString &branchName, const QString &sourceBranch)
 {
-    // Merge locally: checkout source branch in main repo, merge the feature branch
-    // We do this as two sequential commands via a shell
-    QString script = QStringLiteral("git checkout %1 && git merge %2 --no-edit").arg(sourceBranch, branchName);
+    // Merge locally: stash any changes, checkout source, merge, restore
+    QString script = QStringLiteral(
+        "set -e\n"
+        "git stash --quiet 2>/dev/null || true\n"
+        "git checkout '%1'\n"
+        "git merge '%2' --no-edit\n"
+        "git stash pop --quiet 2>/dev/null || true\n"
+    ).arg(sourceBranch, branchName);
     runAsync(QStringLiteral("merge"), repoPath,
              QStringLiteral("bash"),
              {QStringLiteral("-c"), script});
