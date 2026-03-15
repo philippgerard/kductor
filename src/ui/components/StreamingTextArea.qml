@@ -207,17 +207,29 @@ QQC2.ScrollView {
                     height: 0
                 }
 
-                // System — small muted line
-                QQC2.Label {
+                // User message — prominent but distinct from agent replies
+                RowLayout {
                     visible: lineType === 4
                     Layout.fillWidth: true
-                    Layout.topMargin: Kirigami.Units.smallSpacing
+                    Layout.topMargin: Kirigami.Units.largeSpacing
                     Layout.bottomMargin: Kirigami.Units.smallSpacing
-                    text: content
-                    wrapMode: Text.Wrap
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    opacity: 0.45
-                    textFormat: Text.PlainText
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Rectangle {
+                        width: 3
+                        Layout.fillHeight: true
+                        radius: 1
+                        color: Kirigami.Theme.highlightColor
+                        opacity: 0.5
+                    }
+
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        text: content
+                        wrapMode: Text.Wrap
+                        font.bold: true
+                        textFormat: Text.PlainText
+                    }
                 }
 
                 // Error
