@@ -1,5 +1,7 @@
 # Kductor
 
+*Your code, conducted.*
+
 A KDE-native AI agent orchestrator. Run multiple Claude Code agents in parallel across isolated git worktrees, review diffs, and manage the full PR/merge lifecycle — all from a single desktop app.
 
 Inspired by [Conductor](https://www.conductor.build) for macOS.
@@ -98,6 +100,10 @@ src/
 │   └── components/           # StatusBadge, StreamingTextArea, CommandBar
 └── main.cpp                  # Entry point, tray, notifications
 ```
+
+## Why "Kductor"?
+
+**K** (KDE) + Con**ductor** — a conductor orchestrates musicians, Kductor orchestrates AI agents. Also a nod to [Conductor](https://www.conductor.build), the macOS app that inspired it.
 
 ## License
 
