@@ -368,47 +368,69 @@ static int diffLineCb(const git_diff_delta *, const git_diff_hunk *, const git_d
     return 0;
 }
 
-QVariantList GitManager::getDetailedDiff(const QString &worktreePath, const QString &sourceBranch) const
+QVariantList GitManager::getDetailedDiff(const QString &worktreePath, const QString &sourceBranch, int mode) const
 {
-    // Open the worktree directory as its own repository
+    // mode: 0 = all (source vs workdir), 1 = committed (source vs HEAD), 2 = pending (HEAD vs workdir)
+
     git_repository *wtRepo = nullptr;
     if (git_repository_open(&wtRepo, worktreePath.toUtf8().constData()) < 0)
         return {};
-
-    // Resolve the source branch to a tree (e.g., "main")
-    git_object *sourceObj = nullptr;
-    git_commit *sourceCommit = nullptr;
-    git_tree *sourceTree = nullptr;
-    bool haveSourceTree = false;
-
-    if (!sourceBranch.isEmpty()) {
-        if (git_revparse_single(&sourceObj, wtRepo, sourceBranch.toUtf8().constData()) == 0) {
-            if (git_commit_lookup(&sourceCommit, wtRepo, git_object_id(sourceObj)) == 0) {
-                if (git_commit_tree(&sourceTree, sourceCommit) == 0) {
-                    haveSourceTree = true;
-                }
-            }
-        }
-    }
 
     git_diff *diff = nullptr;
     git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
     opts.flags = GIT_DIFF_INCLUDE_UNTRACKED;
     opts.context_lines = 3;
 
-    int err;
-    if (haveSourceTree) {
-        // Diff source branch tree vs working directory (shows ALL changes)
-        err = git_diff_tree_to_workdir_with_index(&diff, wtRepo, sourceTree, &opts);
-    } else {
-        // Fallback: diff HEAD vs working directory
-        err = git_diff_index_to_workdir(&diff, wtRepo, nullptr, &opts);
-    }
+    int err = -1;
 
-    // Cleanup source refs
-    if (sourceTree) git_tree_free(sourceTree);
-    if (sourceCommit) git_commit_free(sourceCommit);
-    if (sourceObj) git_object_free(sourceObj);
+    if (mode == 2) {
+        // Pending: HEAD vs working directory (uncommitted changes only)
+        err = git_diff_index_to_workdir(&diff, wtRepo, nullptr, &opts);
+    } else {
+        // Resolve source branch tree for modes 0 and 1
+        git_object *sourceObj = nullptr;
+        git_commit *sourceCommit = nullptr;
+        git_tree *sourceTree = nullptr;
+        bool haveSourceTree = false;
+
+        QString ref = sourceBranch.isEmpty() ? QStringLiteral("HEAD") : sourceBranch;
+        if (git_revparse_single(&sourceObj, wtRepo, ref.toUtf8().constData()) == 0) {
+            if (git_commit_lookup(&sourceCommit, wtRepo, git_object_id(sourceObj)) == 0) {
+                if (git_commit_tree(&sourceTree, sourceCommit) == 0) {
+                    haveSourceTree = true;
+                }
+            }
+        }
+
+        if (haveSourceTree) {
+            if (mode == 1) {
+                // Committed: source tree vs HEAD tree
+                git_reference *headRef = nullptr;
+                git_commit *headCommit = nullptr;
+                git_tree *headTree = nullptr;
+                if (git_repository_head(&headRef, wtRepo) == 0) {
+                    if (git_commit_lookup(&headCommit, wtRepo, git_reference_target(headRef)) == 0) {
+                        if (git_commit_tree(&headTree, headCommit) == 0) {
+                            err = git_diff_tree_to_tree(&diff, wtRepo, sourceTree, headTree, &opts);
+                            git_tree_free(headTree);
+                        }
+                        git_commit_free(headCommit);
+                    }
+                    git_reference_free(headRef);
+                }
+            } else {
+                // All: source tree vs working directory
+                err = git_diff_tree_to_workdir_with_index(&diff, wtRepo, sourceTree, &opts);
+            }
+        } else if (mode == 0) {
+            // Fallback for mode 0 when source branch not found
+            err = git_diff_index_to_workdir(&diff, wtRepo, nullptr, &opts);
+        }
+
+        if (sourceTree) git_tree_free(sourceTree);
+        if (sourceCommit) git_commit_free(sourceCommit);
+        if (sourceObj) git_object_free(sourceObj);
+    }
 
     if (err < 0) {
         git_repository_free(wtRepo);

@@ -40,7 +40,8 @@ public:
 
     Q_INVOKABLE QVariantList getStatus() const;
     Q_INVOKABLE QVariantList getDiff() const;
-    Q_INVOKABLE QVariantList getDetailedDiff(const QString &worktreePath, const QString &sourceBranch) const;
+    // mode: 0=all (source vs workdir), 1=committed (source vs HEAD), 2=pending (HEAD vs workdir)
+    Q_INVOKABLE QVariantList getDetailedDiff(const QString &worktreePath, const QString &sourceBranch, int mode = 0) const;
 
     git_repository *repo() const { return m_repo.get(); }
     QString lastError() const { return m_lastError; }

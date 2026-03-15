@@ -13,36 +13,53 @@ Item {
 
     property var diffData: []
     property int selectedFileIndex: 0
+    property int diffMode: 0  // 0=all, 1=committed, 2=pending
 
     function reload() {
-        diffData = GitManager.getDetailedDiff(worktreePath, sourceBranch);
+        diffData = GitManager.getDetailedDiff(worktreePath, sourceBranch, diffMode);
         selectedFileIndex = 0;
     }
 
-    // Empty state
+    // Empty state (shown below the mode bar)
     Kirigami.PlaceholderMessage {
         anchors.centerIn: parent
+        anchors.verticalCenterOffset: Kirigami.Units.gridUnit * 2
         visible: diffData.length === 0
         width: parent.width - Kirigami.Units.largeSpacing * 4
         icon.name: "vcs-diff"
         text: i18n("No changes")
-        explanation: i18n("The worktree has no modifications relative to the source branch.")
+        explanation: diffMode === 1 ? i18n("No committed changes relative to the source branch.")
+                   : diffMode === 2 ? i18n("No uncommitted changes in the worktree.")
+                   : i18n("No modifications relative to the source branch.")
     }
 
     // Main content
     ColumnLayout {
         anchors.fill: parent
-        visible: diffData.length > 0
+        visible: diffData.length > 0 || true // always show the mode bar
         spacing: 0
 
-        // File selector bar
+        // Mode and file selector bar
         RowLayout {
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.smallSpacing
             spacing: Kirigami.Units.smallSpacing
 
+            QQC2.TabBar {
+                id: modeBar
+                Layout.alignment: Qt.AlignVCenter
+                currentIndex: diffMode
+                onCurrentIndexChanged: {
+                    diffMode = currentIndex;
+                    reload();
+                }
+                QQC2.TabButton { text: i18n("All") }
+                QQC2.TabButton { text: i18n("Committed") }
+                QQC2.TabButton { text: i18n("Pending") }
+            }
+
             QQC2.Label {
-                text: i18n("%1 files changed", diffData.length)
+                text: i18np("%1 file", "%1 files", diffData.length)
                 opacity: 0.6
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
             }
