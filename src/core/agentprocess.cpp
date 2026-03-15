@@ -167,6 +167,14 @@ void AgentProcess::parseLine(const QByteArray &line)
         }
     } else if (type == QStringLiteral("assistant")) {
         QJsonObject message = obj[QStringLiteral("message")].toObject();
+
+        // Detect context compaction
+        QJsonValue ctxMgmt = message[QStringLiteral("context_management")];
+        if (!ctxMgmt.isNull() && ctxMgmt.isObject()) {
+            setActivity(QStringLiteral("Context compacted"));
+            Q_EMIT assistantText(QStringLiteral("*Context was automatically compacted to fit the conversation window.*"));
+        }
+
         QJsonArray content = message[QStringLiteral("content")].toArray();
 
         for (const auto &block : content) {
