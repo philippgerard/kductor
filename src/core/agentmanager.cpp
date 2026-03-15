@@ -2,11 +2,37 @@
 #include "agentprocess.h"
 #include "agentoutputmodel.h"
 
+#include <QDir>
+#include <QFile>
 #include <QJsonObject>
+#include <QStandardPaths>
 
 AgentManager::AgentManager(QObject *parent)
     : QObject(parent)
 {
+    detectClaude();
+}
+
+void AgentManager::detectClaude()
+{
+    QStringList candidates = {
+        QDir::homePath() + QStringLiteral("/.local/bin/claude"),
+        QDir::homePath() + QStringLiteral("/.npm/bin/claude"),
+        QStringLiteral("/usr/local/bin/claude"),
+        QStringLiteral("/usr/bin/claude"),
+    };
+    for (const auto &path : candidates) {
+        if (QFile::exists(path)) {
+            m_claudePath = path;
+            m_claudeAvailable = true;
+            return;
+        }
+    }
+    QString found = QStandardPaths::findExecutable(QStringLiteral("claude"));
+    if (!found.isEmpty()) {
+        m_claudePath = found;
+        m_claudeAvailable = true;
+    }
 }
 
 QString AgentManager::createAgent(const QString &workspaceId)
@@ -21,6 +47,7 @@ QString AgentManager::createAgent(const QString &workspaceId)
     connectAgent(agentId, agent);
 
     Q_EMIT agentSpawned(agentId, workspaceId);
+    Q_EMIT activeCountChanged();
     return agentId;
 }
 
@@ -33,7 +60,7 @@ void AgentManager::startAgent(const QString &agentId, const QString &workingDir,
                                const QString &prompt, const QString &model)
 {
     auto *agent = m_agents.value(agentId, nullptr);
-    if (!agent)
+    if (!agent || !canStartAgent())
         return;
     agent->start(workingDir, prompt, model);
     Q_EMIT activeCountChanged();
@@ -65,6 +92,19 @@ void AgentManager::stopAll()
     Q_EMIT activeCountChanged();
 }
 
+void AgentManager::removeAgent(const QString &agentId)
+{
+    stopAgent(agentId);
+
+    if (auto *agent = m_agents.take(agentId))
+        agent->deleteLater();
+    if (auto *model = m_outputModels.take(agentId))
+        model->deleteLater();
+    m_agentToWorkspace.remove(agentId);
+
+    Q_EMIT activeCountChanged();
+}
+
 QStringList AgentManager::agentsForWorkspace(const QString &workspaceId) const
 {
     QStringList result;
@@ -87,10 +127,22 @@ QString AgentManager::agentActivity(const QString &agentId) const
     return agent ? agent->currentActivity() : QString();
 }
 
-double AgentManager::agentCost(const QString &agentId) const
+bool AgentManager::canStartAgent() const
 {
-    auto *agent = m_agents.value(agentId, nullptr);
-    return agent ? agent->totalCost() : 0.0;
+    return m_claudeAvailable && activeCount() < m_maxConcurrentAgents;
+}
+
+QString AgentManager::claudePath() const
+{
+    return m_claudePath;
+}
+
+void AgentManager::setMaxConcurrentAgents(int max)
+{
+    if (m_maxConcurrentAgents != max) {
+        m_maxConcurrentAgents = max;
+        Q_EMIT maxConcurrentAgentsChanged();
+    }
 }
 
 int AgentManager::activeCount() const

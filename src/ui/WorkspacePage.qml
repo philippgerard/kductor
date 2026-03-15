@@ -41,7 +41,7 @@ Kirigami.Page {
     }
 
     function removeAgent(agentId) {
-        AgentManager.stopAgent(agentId);
+        AgentManager.removeAgent(agentId);
         agents = agents.filter(a => a.id !== agentId);
         if (currentAgentId === agentId) {
             currentAgentId = agents.length > 0 ? agents[0].id : "";

@@ -85,6 +85,16 @@ ColumnLayout {
         Layout.topMargin: Kirigami.Units.smallSpacing
         Layout.bottomMargin: Kirigami.Units.smallSpacing
         onPromptSubmitted: function(prompt) {
+            if (!AgentManager.claudeAvailable) {
+                if (agentPanel.outputModel)
+                    agentPanel.outputModel.appendError(i18n("Claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code"));
+                return;
+            }
+            if (agentPanel.agentStatus === 0 && !AgentManager.canStartAgent()) {
+                if (agentPanel.outputModel)
+                    agentPanel.outputModel.appendError(i18n("Max concurrent agents reached (%1). Stop an agent first.", AgentManager.maxConcurrentAgents));
+                return;
+            }
             if (agentPanel.outputModel)
                 agentPanel.outputModel.appendSystem(prompt);
             if (agentPanel.agentStatus === 0) {
