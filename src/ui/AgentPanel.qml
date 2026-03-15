@@ -51,29 +51,20 @@ ColumnLayout {
             status: agentPanel.agentStatus
         }
 
-        // Context usage bar
-        RowLayout {
-            visible: contextWindow > 0
-            spacing: Kirigami.Units.smallSpacing
-            Layout.preferredWidth: Kirigami.Units.gridUnit * 8
-
-            QQC2.ProgressBar {
-                Layout.fillWidth: true
-                from: 0
-                to: contextWindow
-                value: contextUsed
-                opacity: 0.6
-            }
-            QQC2.Label {
-                text: {
-                    let pct = Math.round(contextUsed / contextWindow * 100);
-                    let usedK = Math.round(contextUsed / 1000);
+        // Context usage
+        QQC2.Label {
+            visible: contextUsed > 0
+            text: {
+                let usedK = (contextUsed / 1000).toFixed(1);
+                if (contextWindow > 0) {
                     let totalK = Math.round(contextWindow / 1000);
-                    return usedK + "k / " + totalK + "k";
+                    let pct = Math.round(contextUsed / contextWindow * 100);
+                    return usedK + "k / " + totalK + "k (" + pct + "%)";
                 }
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
-                opacity: 0.5
+                return usedK + "k tokens";
             }
+            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            opacity: 0.4
         }
 
         Item { Layout.fillWidth: true }
