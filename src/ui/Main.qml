@@ -38,5 +38,6 @@ Kirigami.ApplicationWindow {
         AboutPage {}
     }
 
+    pageStack.columnView.columnResizeMode: Kirigami.ColumnView.SingleColumn
     pageStack.initialPage: DashboardPage {}
 }

@@ -275,13 +275,29 @@ void AgentManager::connectAgent(const QString &agentId, AgentProcess *agent)
     });
 
     connect(agent, &AgentProcess::toolUse, this, [this, agentId, model](const QString &toolName, const QJsonObject &input) {
-        QString summary = toolName;
+        QString detail;
         if (input.contains(QStringLiteral("command")))
-            summary += QStringLiteral(": ") + input[QStringLiteral("command")].toString();
+            detail = input[QStringLiteral("command")].toString();
         else if (input.contains(QStringLiteral("file_path")))
-            summary += QStringLiteral(": ") + input[QStringLiteral("file_path")].toString();
+            detail = input[QStringLiteral("file_path")].toString();
         else if (input.contains(QStringLiteral("pattern")))
-            summary += QStringLiteral(": ") + input[QStringLiteral("pattern")].toString();
+            detail = input[QStringLiteral("pattern")].toString();
+
+        // Strip long worktree paths — keep only the relative part
+        if (!detail.isEmpty()) {
+            int kductorIdx = detail.indexOf(QStringLiteral("/.kductor/worktrees/"));
+            if (kductorIdx >= 0) {
+                // Find the end of the worktree dir name (third / after .kductor)
+                int afterWorktree = detail.indexOf(QLatin1Char('/'), kductorIdx + 20);
+                if (afterWorktree >= 0) {
+                    afterWorktree = detail.indexOf(QLatin1Char('/'), afterWorktree + 1);
+                    if (afterWorktree >= 0)
+                        detail = detail.mid(afterWorktree + 1);
+                }
+            }
+        }
+
+        QString summary = toolName + (detail.isEmpty() ? QString() : QStringLiteral(": ") + detail);
         if (model) model->appendToolUse(toolName, summary);
         Q_EMIT agentOutput(agentId, 2, summary, toolName);
     });

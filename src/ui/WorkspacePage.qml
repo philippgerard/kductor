@@ -17,8 +17,9 @@ Kirigami.Page {
     title: workspaceName
 
     property string currentAgentId: ""
-    property var agents: []  // [{id: "...", name: "Agent 1"}, ...]
+    property var agents: []
     property int nextAgentNumber: 1
+    property bool showingDiff: false
 
     Component.onCompleted: {
         let existing = AgentManager.agentsForWorkspace(workspaceId);
@@ -28,7 +29,6 @@ Kirigami.Page {
             for (let i = 0; i < existing.length; i++) {
                 let name = AgentManager.agentName(existing[i]) || i18n("Agent %1", i + 1);
                 restored.push({id: existing[i], name: name});
-                // Extract number from name to continue counter
                 let match = name.match(/(\d+)$/);
                 if (match) maxNum = Math.max(maxNum, parseInt(match[1]));
             }
@@ -39,6 +39,7 @@ Kirigami.Page {
     }
 
     function addAgent() {
+        showingDiff = false;
         let name = i18n("Agent %1", nextAgentNumber);
         let agentId = AgentManager.createAgent(workspacePage.workspaceId, name);
         nextAgentNumber++;
@@ -68,22 +69,20 @@ Kirigami.Page {
             onTriggered: addAgent()
         },
         Kirigami.Action {
-            text: i18n("View Diff")
-            icon.name: "vcs-diff"
+            text: showingDiff ? i18n("Agents") : i18n("Diff")
+            icon.name: showingDiff ? "system-run-symbolic" : "vcs-diff"
             shortcut: "Ctrl+D"
             onTriggered: {
-                applicationWindow().pageStack.push(Qt.resolvedUrl("DiffViewerPage.qml"), {
-                    worktreePath: workspacePage.worktreePath,
-                    sourceBranch: workspacePage.sourceBranch,
-                    workspaceName: workspacePage.workspaceName
-                });
+                showingDiff = !showingDiff;
+                if (showingDiff) diffViewer.reload();
             }
         }
     ]
 
+    // Placeholder when no agents and not showing diff
     Kirigami.PlaceholderMessage {
         anchors.centerIn: parent
-        visible: agents.length === 0
+        visible: agents.length === 0 && !showingDiff
         width: parent.width - (Kirigami.Units.largeSpacing * 4)
         icon.name: "system-run-symbolic"
         text: i18n("No agents yet")
@@ -95,12 +94,12 @@ Kirigami.Page {
         }
     }
 
+    // Agents view
     ColumnLayout {
         anchors.fill: parent
-        visible: agents.length > 0
+        visible: agents.length > 0 && !showingDiff
         spacing: 0
 
-        // Agent tabs
         QQC2.TabBar {
             id: agentTabBar
             Layout.fillWidth: true
@@ -116,7 +115,6 @@ Kirigami.Page {
             }
         }
 
-        // Framed content area
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -141,6 +139,16 @@ Kirigami.Page {
                 }
             }
         }
+    }
+
+    // Diff view (inline, not a separate page)
+    DiffViewerPage {
+        id: diffViewer
+        anchors.fill: parent
+        visible: showingDiff
+        worktreePath: workspacePage.worktreePath
+        sourceBranch: workspacePage.sourceBranch
+        workspaceName: workspacePage.workspaceName
     }
 
     // Header info bar

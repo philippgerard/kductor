@@ -4,27 +4,15 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.kductor
 
-Kirigami.Page {
+Item {
     id: diffPage
 
-    required property string worktreePath
-    required property string sourceBranch
-    required property string workspaceName
-
-    title: i18n("Changes — %1", workspaceName)
+    property string worktreePath: ""
+    property string sourceBranch: ""
+    property string workspaceName: ""
 
     property var diffData: []
     property int selectedFileIndex: 0
-
-    Component.onCompleted: reload()
-
-    actions: [
-        Kirigami.Action {
-            text: i18n("Refresh")
-            icon.name: "view-refresh-symbolic"
-            onTriggered: reload()
-        }
-    ]
 
     function reload() {
         diffData = GitManager.getDetailedDiff(worktreePath, sourceBranch);

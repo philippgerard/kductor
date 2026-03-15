@@ -25,6 +25,9 @@ QQC2.ScrollView {
             });
         }
 
+        // Track which tool-use group indices are expanded
+        property var expandedToolGroups: ({})
+
         delegate: Item {
             id: lineDelegate
 
@@ -32,6 +35,37 @@ QQC2.ScrollView {
             required property int lineType
             required property string toolName
             required property int index
+
+            // For tool use lines: is this the first in a consecutive run?
+            readonly property bool isToolUse: lineType === 2
+            readonly property bool prevIsToolUse: index > 0 && listView.model.data(listView.model.index(index - 1, 0), 258) === 2 // LineTypeRole = 258
+            readonly property bool isGroupStart: isToolUse && !prevIsToolUse
+            readonly property bool isGroupMember: isToolUse && prevIsToolUse
+
+            // Find which group start index this tool use belongs to
+            function findGroupStart() {
+                let i = index;
+                while (i > 0) {
+                    let prevType = listView.model.data(listView.model.index(i - 1, 0), 258);
+                    if (prevType !== 2) break;
+                    i--;
+                }
+                return i;
+            }
+
+            // Count consecutive tool uses from a start index
+            function countGroupSize(startIdx) {
+                let count = 0;
+                let total = listView.model.rowCount();
+                for (let i = startIdx; i < total; i++) {
+                    if (listView.model.data(listView.model.index(i, 0), 258) !== 2) break;
+                    count++;
+                }
+                return count;
+            }
+
+            readonly property int groupStartIdx: isToolUse ? findGroupStart() : -1
+            readonly property bool groupExpanded: groupStartIdx >= 0 && listView.expandedToolGroups[groupStartIdx] === true
 
             width: listView.width - listView.leftMargin - listView.rightMargin
             height: lineContent.implicitHeight
@@ -98,19 +132,55 @@ QQC2.ScrollView {
                     }
                 }
 
-                // Tool use — compact mono line
-                RowLayout {
-                    visible: lineType === 2
+                // Tool use — collapsible group header (only on first of consecutive run)
+                ColumnLayout {
+                    visible: isGroupStart
                     Layout.fillWidth: true
                     Layout.topMargin: 2
                     Layout.bottomMargin: 2
+                    spacing: 0
+
+                    QQC2.AbstractButton {
+                        Layout.fillWidth: true
+                        contentItem: RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+                            Kirigami.Icon {
+                                source: groupExpanded ? "arrow-down-symbolic" : "arrow-right-symbolic"
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                opacity: 0.4
+                            }
+                            QQC2.Label {
+                                text: {
+                                    let n = countGroupSize(lineDelegate.index);
+                                    return i18np("%1 action", "%1 actions", n);
+                                }
+                                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                opacity: 0.4
+                            }
+                            Item { Layout.fillWidth: true }
+                        }
+                        onClicked: {
+                            let groups = listView.expandedToolGroups;
+                            groups[lineDelegate.index] = !groups[lineDelegate.index];
+                            listView.expandedToolGroups = groups;
+                        }
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    }
+                }
+
+                // Tool use — individual line (visible only when group is expanded)
+                RowLayout {
+                    visible: isToolUse && groupExpanded
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
                     spacing: Kirigami.Units.smallSpacing
 
                     Rectangle {
-                        width: 3
+                        width: 2
                         Layout.fillHeight: true
                         color: Kirigami.Theme.focusColor
-                        opacity: 0.6
+                        opacity: 0.3
                         radius: 1
                     }
                     QQC2.Label {
@@ -119,10 +189,16 @@ QQC2.ScrollView {
                         font.family: "monospace"
                         font.pointSize: Kirigami.Theme.smallFont.pointSize
                         color: Kirigami.Theme.focusColor
-                        opacity: 0.7
+                        opacity: 0.5
                         elide: Text.ElideRight
                         textFormat: Text.PlainText
                     }
+                }
+
+                // Tool use — group member hidden (takes no space when collapsed)
+                Item {
+                    visible: isGroupMember && !groupExpanded
+                    height: 0
                 }
 
                 // Tool result — hidden by default (too verbose)
