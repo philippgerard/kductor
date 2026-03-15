@@ -29,6 +29,9 @@ Inspired by [Conductor](https://www.conductor.build) for macOS.
 - Push branches to remote
 - One-click PR creation (GitHub via `gh`, Gitea/others via browser)
 - Auto-generated PR title and description from commit history using Claude Haiku
+- Live PR status tracking with colored status indicator
+- Auto-detect when PR is merged remotely and pull the source branch
+- Prompt to archive workspace after PR is merged
 - Local merge with auto-commit of uncommitted worktree changes
 - Workspace archival with worktree cleanup
 - Forge auto-detection (GitHub, Gitea, GitLab)
