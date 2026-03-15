@@ -101,6 +101,19 @@ void WorkspaceModel::remove(const QString &id)
     }
 }
 
+void WorkspaceModel::updateStatus(const QString &id, int status)
+{
+    for (int i = 0; i < m_workspaces.size(); ++i) {
+        if (m_workspaces[i].id == id) {
+            m_workspaces[i].status = status;
+            m_workspaces[i].updatedAt = QDateTime::currentDateTime();
+            m_store.updateWorkspace(m_workspaces[i]);
+            Q_EMIT dataChanged(index(i), index(i), {StatusRole});
+            return;
+        }
+    }
+}
+
 void WorkspaceModel::addWorkspace(const Workspace &ws)
 {
     beginInsertRows(QModelIndex(), m_workspaces.size(), m_workspaces.size());

@@ -20,6 +20,7 @@ Kirigami.Page {
     property var agents: []
     property int nextAgentNumber: 1
     property bool showingDiff: false
+    property bool operationBusy: false
 
     Component.onCompleted: {
         let existing = AgentManager.agentsForWorkspace(workspaceId);
@@ -62,6 +63,45 @@ Kirigami.Page {
         return 0;
     }
 
+    // --- Operation result handling ---
+    Connections {
+        target: WorktreeManager
+        function onOperationStarted(op) {
+            operationBusy = true;
+            statusMessage.type = Kirigami.MessageType.Information;
+            statusMessage.text = i18n("Running…");
+            statusMessage.visible = true;
+        }
+        function onOperationSucceeded(op, result) {
+            operationBusy = false;
+            statusMessage.type = Kirigami.MessageType.Positive;
+            if (op === "push") {
+                statusMessage.text = i18n("Branch pushed to remote.");
+            } else if (op === "pr") {
+                statusMessage.text = result || i18n("Pull request created.");
+            } else if (op === "merge-pr") {
+                statusMessage.text = i18n("Pull request merged.");
+                WorkspaceModel.updateStatus(workspaceId, 2); // Completed
+            } else if (op === "merge") {
+                statusMessage.text = i18n("Merged into %1.", sourceBranch);
+                WorkspaceModel.updateStatus(workspaceId, 2); // Completed
+            } else if (op === "archive") {
+                statusMessage.visible = false;
+                WorkspaceModel.remove(workspaceId);
+                applicationWindow().pageStack.pop();
+                return;
+            }
+            statusMessage.visible = true;
+        }
+        function onOperationFailed(op, error) {
+            operationBusy = false;
+            statusMessage.type = Kirigami.MessageType.Error;
+            statusMessage.text = error;
+            statusMessage.visible = true;
+        }
+    }
+
+    // --- Actions ---
     actions: [
         Kirigami.Action {
             text: i18n("Add Agent")
@@ -76,10 +116,92 @@ Kirigami.Page {
                 showingDiff = !showingDiff;
                 if (showingDiff) diffViewer.reload();
             }
+        },
+        Kirigami.Action {
+            text: i18n("Push & PR")
+            icon.name: "vcs-push"
+            enabled: !operationBusy
+            onTriggered: prDialog.open()
+        },
+        Kirigami.Action {
+            text: i18n("Merge")
+            icon.name: "vcs-merge"
+            enabled: !operationBusy
+            children: [
+                Kirigami.Action {
+                    text: i18n("Merge PR (GitHub)")
+                    icon.name: "vcs-merge"
+                    enabled: !operationBusy
+                    onTriggered: mergePrDialog.open()
+                },
+                Kirigami.Action {
+                    text: i18n("Merge locally to %1", sourceBranch)
+                    icon.name: "vcs-merge"
+                    enabled: !operationBusy
+                    onTriggered: mergeLocalDialog.open()
+                },
+                Kirigami.Action { separator: true },
+                Kirigami.Action {
+                    text: i18n("Archive workspace")
+                    icon.name: "archive-remove"
+                    enabled: !operationBusy
+                    onTriggered: archiveDialog.open()
+                }
+            ]
         }
     ]
 
-    // Placeholder when no agents and not showing diff
+    // --- Header ---
+    header: ColumnLayout {
+        spacing: 0
+
+        QQC2.ToolBar {
+            Layout.fillWidth: true
+            contentItem: RowLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                Kirigami.Icon {
+                    source: "vcs-branch"
+                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                }
+                QQC2.Label {
+                    text: branchName
+                    elide: Text.ElideRight
+                }
+                Kirigami.Separator {
+                    Layout.fillHeight: true
+                }
+                Kirigami.Icon {
+                    source: "folder-symbolic"
+                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                }
+                QQC2.Label {
+                    text: repoPath
+                    elide: Text.ElideMiddle
+                    Layout.fillWidth: true
+                }
+                QQC2.Label {
+                    text: i18np("%1 agent", "%1 agents", agents.length)
+                    opacity: 0.7
+                }
+            }
+        }
+
+        // Status message banner
+        Kirigami.InlineMessage {
+            id: statusMessage
+            Layout.fillWidth: true
+            visible: false
+            showCloseButton: true
+            onVisibleChanged: {
+                if (!visible) text = "";
+            }
+        }
+    }
+
+    // --- Placeholder ---
     Kirigami.PlaceholderMessage {
         anchors.centerIn: parent
         visible: agents.length === 0 && !showingDiff
@@ -94,7 +216,7 @@ Kirigami.Page {
         }
     }
 
-    // Agents view
+    // --- Agents view ---
     ColumnLayout {
         anchors.fill: parent
         visible: agents.length > 0 && !showingDiff
@@ -141,7 +263,7 @@ Kirigami.Page {
         }
     }
 
-    // Diff view (inline, not a separate page)
+    // --- Diff view ---
     DiffViewerPage {
         id: diffViewer
         anchors.fill: parent
@@ -151,37 +273,168 @@ Kirigami.Page {
         workspaceName: workspacePage.workspaceName
     }
 
-    // Header info bar
-    header: QQC2.ToolBar {
-        contentItem: RowLayout {
-            spacing: Kirigami.Units.smallSpacing
+    // --- Dialogs ---
 
-            Kirigami.Icon {
-                source: "vcs-branch"
-                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+    // PR creation dialog
+    Kirigami.Dialog {
+        id: prDialog
+        title: i18n("Create Pull Request")
+        preferredWidth: Kirigami.Units.gridUnit * 28
+
+        ColumnLayout {
+            spacing: Kirigami.Units.largeSpacing
+
+            Kirigami.FormLayout {
+                QQC2.TextField {
+                    id: prTitleField
+                    Kirigami.FormData.label: i18n("Title:")
+                    text: workspaceName
+                    Layout.fillWidth: true
+                }
+
+                QQC2.TextArea {
+                    id: prBodyField
+                    Kirigami.FormData.label: i18n("Description:")
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Kirigami.Units.gridUnit * 6
+                    placeholderText: i18n("Describe the changes…")
+                    wrapMode: TextEdit.Wrap
+                }
             }
-            QQC2.Label {
-                text: branchName
-                elide: Text.ElideRight
-            }
-            Kirigami.Separator {
-                Layout.fillHeight: true
-            }
-            Kirigami.Icon {
-                source: "folder-symbolic"
-                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-            }
-            QQC2.Label {
-                text: repoPath
-                elide: Text.ElideMiddle
+
+            Kirigami.InlineMessage {
                 Layout.fillWidth: true
-            }
-            QQC2.Label {
-                text: i18np("%1 agent", "%1 agents", agents.length)
-                opacity: 0.7
+                type: Kirigami.MessageType.Information
+                text: i18n("This will push the branch and create a PR on GitHub.")
+                visible: true
             }
         }
+
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Push & Create PR")
+                icon.name: "vcs-push"
+                enabled: prTitleField.text.length > 0 && !operationBusy
+                onTriggered: {
+                    prDialog.close();
+                    // Push first, then create PR on success
+                    let title = prTitleField.text;
+                    let body = prBodyField.text;
+                    pushThenPR(title, body);
+                }
+            }
+        ]
+    }
+
+    // Push then create PR (sequential async)
+    function pushThenPR(title, body) {
+        let conn = null;
+        let errConn = null;
+
+        function cleanup() {
+            if (conn) WorktreeManager.operationSucceeded.disconnect(onPushDone);
+            if (errConn) WorktreeManager.operationFailed.disconnect(onPushFail);
+        }
+        function onPushDone(op, result) {
+            if (op !== "push") return;
+            cleanup();
+            WorktreeManager.createPullRequest(worktreePath, title, body);
+        }
+        function onPushFail(op, error) {
+            if (op !== "push") return;
+            cleanup();
+        }
+
+        WorktreeManager.operationSucceeded.connect(onPushDone);
+        WorktreeManager.operationFailed.connect(onPushFail);
+        WorktreeManager.pushBranch(worktreePath);
+    }
+
+    // Merge PR dialog
+    Kirigami.Dialog {
+        id: mergePrDialog
+        title: i18n("Merge Pull Request")
+        preferredWidth: Kirigami.Units.gridUnit * 22
+
+        ColumnLayout {
+            spacing: Kirigami.Units.largeSpacing
+
+            QQC2.Label {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                text: i18n("This will merge the pull request on GitHub and delete the remote branch.")
+            }
+        }
+
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Merge PR")
+                icon.name: "vcs-merge"
+                enabled: !operationBusy
+                onTriggered: {
+                    mergePrDialog.close();
+                    WorktreeManager.mergePullRequest(worktreePath);
+                }
+            }
+        ]
+    }
+
+    // Local merge dialog
+    Kirigami.Dialog {
+        id: mergeLocalDialog
+        title: i18n("Merge Locally")
+        preferredWidth: Kirigami.Units.gridUnit * 22
+
+        ColumnLayout {
+            spacing: Kirigami.Units.largeSpacing
+
+            QQC2.Label {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                text: i18n("Merge branch '%1' into '%2' in the local repository.\n\nThis will checkout '%2' and merge.", branchName, sourceBranch)
+            }
+        }
+
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Merge")
+                icon.name: "vcs-merge"
+                enabled: !operationBusy
+                onTriggered: {
+                    mergeLocalDialog.close();
+                    WorktreeManager.mergeToSource(repoPath, branchName, sourceBranch);
+                }
+            }
+        ]
+    }
+
+    // Archive dialog
+    Kirigami.Dialog {
+        id: archiveDialog
+        title: i18n("Archive Workspace")
+        preferredWidth: Kirigami.Units.gridUnit * 22
+
+        ColumnLayout {
+            spacing: Kirigami.Units.largeSpacing
+
+            QQC2.Label {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                text: i18n("This will remove the worktree and delete the workspace. Agent sessions will be lost.\n\nThe branch '%1' will remain in the repository.", branchName)
+            }
+        }
+
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Archive")
+                icon.name: "archive-remove"
+                onTriggered: {
+                    archiveDialog.close();
+                    // Stop all agents for this workspace
+                    for (let a of agents) AgentManager.removeAgent(a.id);
+                    WorktreeManager.archiveWorkspace(worktreePath, repoPath);
+                }
+            }
+        ]
     }
 }

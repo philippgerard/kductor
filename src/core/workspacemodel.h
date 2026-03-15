@@ -36,6 +36,7 @@ public:
     Q_INVOKABLE QVariantMap get(int index) const;
     Q_INVOKABLE QVariantMap getById(const QString &id) const;
     Q_INVOKABLE void remove(const QString &id);
+    Q_INVOKABLE void updateStatus(const QString &id, int status);
 
     void addWorkspace(const Workspace &ws);
 

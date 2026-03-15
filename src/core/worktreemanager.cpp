@@ -3,6 +3,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QUuid>
@@ -82,4 +83,87 @@ bool WorktreeManager::removeWorkspace(const QString &workspaceId, const QString 
 
     Q_EMIT workspaceRemoved(workspaceId);
     return true;
+}
+
+// --- Async command runner ---
+
+void WorktreeManager::runAsync(const QString &operation, const QString &workDir,
+                               const QString &program, const QStringList &args)
+{
+    Q_EMIT operationStarted(operation);
+
+    auto *proc = new QProcess(this);
+    proc->setWorkingDirectory(workDir);
+    proc->setProgram(program);
+    proc->setArguments(args);
+
+    connect(proc, &QProcess::finished, this, [this, proc, operation](int exitCode, QProcess::ExitStatus status) {
+        QString stdOut = QString::fromUtf8(proc->readAllStandardOutput()).trimmed();
+        QString stdErr = QString::fromUtf8(proc->readAllStandardError()).trimmed();
+        proc->deleteLater();
+
+        if (status == QProcess::CrashExit || exitCode != 0) {
+            QString error = stdErr.isEmpty() ? stdOut : stdErr;
+            if (error.isEmpty())
+                error = QStringLiteral("Process exited with code %1").arg(exitCode);
+            Q_EMIT operationFailed(operation, error);
+        } else {
+            Q_EMIT operationSucceeded(operation, stdOut);
+        }
+    });
+
+    connect(proc, &QProcess::errorOccurred, this, [this, proc, operation](QProcess::ProcessError err) {
+        Q_UNUSED(err)
+        Q_EMIT operationFailed(operation, proc->errorString());
+        proc->deleteLater();
+    });
+
+    proc->start();
+}
+
+// --- Phase 4 operations ---
+
+void WorktreeManager::pushBranch(const QString &worktreePath)
+{
+    runAsync(QStringLiteral("push"), worktreePath,
+             QStringLiteral("git"),
+             {QStringLiteral("push"), QStringLiteral("-u"), QStringLiteral("origin"), QStringLiteral("HEAD")});
+}
+
+void WorktreeManager::createPullRequest(const QString &worktreePath, const QString &title, const QString &body)
+{
+    runAsync(QStringLiteral("pr"), worktreePath,
+             QStringLiteral("gh"),
+             {QStringLiteral("pr"), QStringLiteral("create"),
+              QStringLiteral("--title"), title,
+              QStringLiteral("--body"), body,
+              QStringLiteral("--fill-verbose")});
+}
+
+void WorktreeManager::mergePullRequest(const QString &worktreePath)
+{
+    runAsync(QStringLiteral("merge-pr"), worktreePath,
+             QStringLiteral("gh"),
+             {QStringLiteral("pr"), QStringLiteral("merge"),
+              QStringLiteral("--merge"), QStringLiteral("--delete-branch")});
+}
+
+void WorktreeManager::mergeToSource(const QString &repoPath, const QString &branchName, const QString &sourceBranch)
+{
+    // Merge locally: checkout source branch in main repo, merge the feature branch
+    // We do this as two sequential commands via a shell
+    QString script = QStringLiteral("git checkout %1 && git merge %2 --no-edit").arg(sourceBranch, branchName);
+    runAsync(QStringLiteral("merge"), repoPath,
+             QStringLiteral("bash"),
+             {QStringLiteral("-c"), script});
+}
+
+void WorktreeManager::archiveWorkspace(const QString &worktreePath, const QString &repoPath)
+{
+    // Remove worktree directory and prune
+    QDir(worktreePath).removeRecursively();
+
+    runAsync(QStringLiteral("archive"), repoPath,
+             QStringLiteral("git"),
+             {QStringLiteral("worktree"), QStringLiteral("prune")});
 }
