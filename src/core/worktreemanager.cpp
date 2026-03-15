@@ -128,6 +128,7 @@ void WorktreeManager::runAsync(const QString &operation, const QString &workDir,
     });
 
     proc->start();
+    proc->closeWriteChannel();
 }
 
 // --- Phase 4 operations ---
@@ -296,6 +297,7 @@ void WorktreeManager::checkPrStatus(const QString &worktreePath)
     });
 
     proc->start();
+    proc->closeWriteChannel();
 }
 
 bool WorktreeManager::hasRemote(const QString &worktreePath) const
