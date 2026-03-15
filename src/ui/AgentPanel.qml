@@ -70,10 +70,33 @@ ColumnLayout {
         QQC2.ToolButton {
             icon.name: "tab-close-symbolic"
             flat: true
-            onClicked: agentPanel.closeRequested(agentPanel.agentId)
+            onClicked: {
+                if (agentPanel.agentStatus === 1 || agentPanel.agentStatus === 2) {
+                    closeAgentDialog.open();
+                } else {
+                    agentPanel.closeRequested(agentPanel.agentId);
+                }
+            }
             QQC2.ToolTip.text: i18n("Close agent")
             QQC2.ToolTip.visible: hovered
         }
+    }
+
+    Kirigami.PromptDialog {
+        id: closeAgentDialog
+        title: i18n("Agent Running")
+        subtitle: i18n("This agent is still running. Stop and close it?")
+        standardButtons: Kirigami.Dialog.Cancel
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Stop & Close")
+                icon.name: "tab-close-symbolic"
+                onTriggered: {
+                    closeAgentDialog.close();
+                    agentPanel.closeRequested(agentPanel.agentId);
+                }
+            }
+        ]
     }
 
     Kirigami.Separator {
