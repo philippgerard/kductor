@@ -44,6 +44,19 @@ ColumnLayout {
 
         Item { Layout.fillWidth: true }
 
+        QQC2.ComboBox {
+            id: modelPicker
+            textRole: "label"
+            valueRole: "value"
+            implicitWidth: Kirigami.Units.gridUnit * 8
+            model: [
+                {label: "Opus 4.6",   value: "opus"},
+                {label: "Sonnet 4.6", value: "sonnet"},
+                {label: "Haiku 4.5",  value: "haiku"}
+            ]
+            currentIndex: 0
+        }
+
         QQC2.ToolButton {
             icon.name: "media-playback-stop-symbolic"
             visible: agentPanel.agentStatus === 2
@@ -98,9 +111,9 @@ ColumnLayout {
             if (agentPanel.outputModel)
                 agentPanel.outputModel.appendSystem(prompt);
             if (agentPanel.agentStatus === 0) {
-                AgentManager.startAgent(agentPanel.agentId, agentPanel.workingDir, prompt, "sonnet");
+                AgentManager.startAgent(agentPanel.agentId, agentPanel.workingDir, prompt, modelPicker.currentValue);
             } else {
-                AgentManager.sendPrompt(agentPanel.agentId, agentPanel.workingDir, prompt, "sonnet");
+                AgentManager.sendPrompt(agentPanel.agentId, agentPanel.workingDir, prompt, modelPicker.currentValue);
             }
         }
     }
