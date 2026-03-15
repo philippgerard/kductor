@@ -6,6 +6,8 @@ import org.kde.kirigami as Kirigami
 QQC2.ScrollView {
     id: streamView
 
+    QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
+
     property alias model: listView.model
 
     ListView {
@@ -41,7 +43,7 @@ QQC2.ScrollView {
                 anchors.right: parent.right
                 spacing: 0
 
-                // Agent text — the primary content
+                // Agent text — the primary content, with markdown
                 QQC2.Label {
                     visible: lineType === 0
                     Layout.fillWidth: true
@@ -49,21 +51,51 @@ QQC2.ScrollView {
                     Layout.bottomMargin: Kirigami.Units.smallSpacing
                     text: content
                     wrapMode: Text.Wrap
-                    textFormat: Text.PlainText
+                    textFormat: Text.MarkdownText
                 }
 
-                // Thinking — subtle italic
-                QQC2.Label {
+                // Thinking — collapsible
+                ColumnLayout {
                     visible: lineType === 1
                     Layout.fillWidth: true
                     Layout.topMargin: 2
                     Layout.bottomMargin: 2
-                    text: content
-                    wrapMode: Text.Wrap
-                    font.italic: true
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    opacity: 0.5
-                    textFormat: Text.PlainText
+                    spacing: 0
+
+                    QQC2.AbstractButton {
+                        Layout.fillWidth: true
+                        contentItem: RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+                            Kirigami.Icon {
+                                source: thinkingContent.visible ? "arrow-down-symbolic" : "arrow-right-symbolic"
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                opacity: 0.4
+                            }
+                            QQC2.Label {
+                                text: i18n("Thinking…")
+                                font.italic: true
+                                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                opacity: 0.4
+                            }
+                            Item { Layout.fillWidth: true }
+                        }
+                        onClicked: thinkingContent.visible = !thinkingContent.visible
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    }
+
+                    QQC2.Label {
+                        id: thinkingContent
+                        visible: false
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
+                        text: content
+                        wrapMode: Text.Wrap
+                        font.italic: true
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        opacity: 0.5
+                        textFormat: Text.PlainText
+                    }
                 }
 
                 // Tool use — compact mono line

@@ -57,14 +57,15 @@ QStringList AgentProcess::buildArgs(const QString &prompt, const QString &model,
 {
     QStringList args;
 
-    if (isResume && !m_sessionId.isEmpty()) {
-        args << QStringLiteral("--resume") << QStringLiteral("--session-id") << m_sessionId;
+    if (isResume) {
+        args << QStringLiteral("--continue");
     }
 
     args << QStringLiteral("-p") << prompt;
     args << QStringLiteral("--output-format") << QStringLiteral("stream-json");
     args << QStringLiteral("--verbose");
     args << QStringLiteral("--model") << model;
+    args << QStringLiteral("--dangerously-skip-permissions");
 
     return args;
 }

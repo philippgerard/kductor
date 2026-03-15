@@ -9,10 +9,15 @@ RowLayout {
 
     signal promptSubmitted(string prompt)
 
+    function focusInput() { promptInput.forceActiveFocus() }
+
+    Component.onCompleted: Qt.callLater(focusInput)
+
     QQC2.TextField {
         id: promptInput
         Layout.fillWidth: true
         placeholderText: i18n("Type a prompt...")
+        focus: true
 
         Keys.onReturnPressed: submitPrompt()
         Keys.onEnterPressed: submitPrompt()
@@ -31,5 +36,6 @@ RowLayout {
             return;
         commandBar.promptSubmitted(promptInput.text);
         promptInput.text = "";
+        promptInput.forceActiveFocus();
     }
 }

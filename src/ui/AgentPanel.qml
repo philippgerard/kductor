@@ -10,12 +10,11 @@ ColumnLayout {
     required property string agentId
     required property string workingDir
 
-    property int agentStatus: 0
+    property int agentStatus: AgentManager.agentStatus(agentId)
     property string agentActivity: ""
+    property var outputModel: AgentManager.outputModel(agentId)
 
-    AgentOutputModel {
-        id: outputModel
-    }
+    signal closeRequested(string agentId)
 
     Connections {
         target: AgentManager
@@ -27,18 +26,6 @@ ColumnLayout {
         function onAgentActivityChanged(id, activity) {
             if (id === agentPanel.agentId)
                 agentPanel.agentActivity = activity;
-        }
-        function onAgentOutput(id, lineType, content, toolName) {
-            if (id !== agentPanel.agentId)
-                return;
-            switch (lineType) {
-            case 0: outputModel.appendText(content); break;
-            case 1: outputModel.appendThinking(content); break;
-            case 2: outputModel.appendToolUse(toolName, content); break;
-            case 3: outputModel.appendToolResult(toolName, content); break;
-            case 4: outputModel.appendSystem(content); break;
-            case 5: outputModel.appendError(content); break;
-            }
         }
     }
 
@@ -65,17 +52,25 @@ ColumnLayout {
             QQC2.ToolTip.text: i18n("Stop agent")
             QQC2.ToolTip.visible: hovered
         }
+
+        QQC2.ToolButton {
+            icon.name: "tab-close-symbolic"
+            flat: true
+            onClicked: agentPanel.closeRequested(agentPanel.agentId)
+            QQC2.ToolTip.text: i18n("Close agent")
+            QQC2.ToolTip.visible: hovered
+        }
     }
 
     Kirigami.Separator {
         Layout.fillWidth: true
     }
 
-    // Output area
+    // Output area — bound to persistent model from C++
     StreamingTextArea {
         Layout.fillWidth: true
         Layout.fillHeight: true
-        model: outputModel
+        model: agentPanel.outputModel
     }
 
     Kirigami.Separator {
@@ -90,7 +85,8 @@ ColumnLayout {
         Layout.topMargin: Kirigami.Units.smallSpacing
         Layout.bottomMargin: Kirigami.Units.smallSpacing
         onPromptSubmitted: function(prompt) {
-            outputModel.appendSystem(prompt);
+            if (agentPanel.outputModel)
+                agentPanel.outputModel.appendSystem(prompt);
             if (agentPanel.agentStatus === 0) {
                 AgentManager.startAgent(agentPanel.agentId, agentPanel.workingDir, prompt, "sonnet");
             } else {

@@ -73,24 +73,6 @@ Kirigami.AbstractCard {
             }
         }
 
-        Item { Layout.fillHeight: true }
-
-        RowLayout {
-            Layout.fillWidth: true
-
-            Kirigami.Icon {
-                source: "system-run-symbolic"
-                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                opacity: 0.7
-            }
-            QQC2.Label {
-                text: i18np("%1 agent", "%1 agents", agents)
-                opacity: 0.7
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
-            }
-            Item { Layout.fillWidth: true }
-        }
     }
 
     HoverHandler {

@@ -50,13 +50,12 @@ Kirigami.ScrollablePage {
                 required property int agentCount
 
                 Layout.fillWidth: true
-                Layout.preferredHeight: Kirigami.Units.gridUnit * 10
 
                 workspaceName: name
                 repositoryPath: repoPath
                 branch: branchName
                 workspaceStatus: status
-                agents: agentCount
+                agents: AgentManager.agentsForWorkspace(workspaceId).length
 
                 onClicked: {
                     let wsData = WorkspaceModel.get(index);

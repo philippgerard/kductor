@@ -16,23 +16,56 @@ Kirigami.Page {
     title: workspaceName
 
     property string currentAgentId: ""
-    property var agentIds: []
+    property var agents: []  // [{id: "...", name: "Agent 1"}, ...]
+    property int nextAgentNumber: 1
+
+    Component.onCompleted: {
+        let existing = AgentManager.agentsForWorkspace(workspaceId);
+        if (existing.length > 0) {
+            let restored = [];
+            for (let i = 0; i < existing.length; i++) {
+                restored.push({id: existing[i], name: i18n("Agent %1", i + 1)});
+            }
+            agents = restored;
+            nextAgentNumber = existing.length + 1;
+            currentAgentId = existing[0];
+        }
+    }
+
+    function addAgent() {
+        let agentId = AgentManager.createAgent(workspacePage.workspaceId);
+        let name = i18n("Agent %1", nextAgentNumber);
+        nextAgentNumber++;
+        agents = [...agents, {id: agentId, name: name}];
+        currentAgentId = agentId;
+    }
+
+    function removeAgent(agentId) {
+        AgentManager.stopAgent(agentId);
+        agents = agents.filter(a => a.id !== agentId);
+        if (currentAgentId === agentId) {
+            currentAgentId = agents.length > 0 ? agents[0].id : "";
+        }
+    }
+
+    function agentIndex(agentId) {
+        for (let i = 0; i < agents.length; i++) {
+            if (agents[i].id === agentId) return i;
+        }
+        return 0;
+    }
 
     actions: [
         Kirigami.Action {
             text: i18n("Add Agent")
             icon.name: "list-add-symbolic"
-            onTriggered: {
-                let agentId = AgentManager.createAgent(workspacePage.workspaceId);
-                agentIds = [...agentIds, agentId];
-                currentAgentId = agentId;
-            }
+            onTriggered: addAgent()
         }
     ]
 
     Kirigami.PlaceholderMessage {
         anchors.centerIn: parent
-        visible: agentIds.length === 0
+        visible: agents.length === 0
         width: parent.width - (Kirigami.Units.largeSpacing * 4)
         icon.name: "system-run-symbolic"
         text: i18n("No agents yet")
@@ -40,44 +73,55 @@ Kirigami.Page {
         helpfulAction: Kirigami.Action {
             text: i18n("Add Agent")
             icon.name: "list-add-symbolic"
-            onTriggered: {
-                let agentId = AgentManager.createAgent(workspacePage.workspaceId);
-                agentIds = [...agentIds, agentId];
-                currentAgentId = agentId;
-            }
+            onTriggered: addAgent()
         }
     }
 
     ColumnLayout {
         anchors.fill: parent
-        visible: agentIds.length > 0
+        visible: agents.length > 0
         spacing: 0
 
         // Agent tabs
         QQC2.TabBar {
             id: agentTabBar
             Layout.fillWidth: true
-            visible: agentIds.length > 1
 
             Repeater {
-                model: agentIds
+                model: agents
                 QQC2.TabButton {
-                    required property string modelData
-                    required property int index
-                    text: i18n("Agent %1", index + 1)
-                    checked: currentAgentId === modelData
-                    onClicked: currentAgentId = modelData
+                    required property var modelData
+                    text: modelData.name
+                    checked: currentAgentId === modelData.id
+                    onClicked: currentAgentId = modelData.id
                 }
             }
         }
 
-        // Agent panel
-        AgentPanel {
+        // Framed content area
+        Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            visible: currentAgentId.length > 0
-            agentId: currentAgentId
-            workingDir: worktreePath
+            color: "transparent"
+            border.width: 1
+            border.color: Kirigami.ColorUtils.linearInterpolation(
+                Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, 0.1)
+
+            StackLayout {
+                anchors.fill: parent
+                anchors.margins: 1
+                currentIndex: agentIndex(currentAgentId)
+
+                Repeater {
+                    model: agents
+                    AgentPanel {
+                        required property var modelData
+                        agentId: modelData.id
+                        workingDir: worktreePath
+                        onCloseRequested: function(id) { removeAgent(id) }
+                    }
+                }
+            }
         }
     }
 
@@ -109,7 +153,7 @@ Kirigami.Page {
                 Layout.fillWidth: true
             }
             QQC2.Label {
-                text: i18np("%1 agent", "%1 agents", agentIds.length)
+                text: i18np("%1 agent", "%1 agents", agents.length)
                 opacity: 0.7
             }
         }

@@ -12,14 +12,21 @@ AgentManager::AgentManager(QObject *parent)
 QString AgentManager::createAgent(const QString &workspaceId)
 {
     auto *agent = new AgentProcess(this);
+    auto *model = new AgentOutputModel(this);
     QString agentId = agent->agentId();
 
     m_agents.insert(agentId, agent);
+    m_outputModels.insert(agentId, model);
     m_agentToWorkspace.insert(agentId, workspaceId);
     connectAgent(agentId, agent);
 
     Q_EMIT agentSpawned(agentId, workspaceId);
     return agentId;
+}
+
+AgentOutputModel *AgentManager::outputModel(const QString &agentId) const
+{
+    return m_outputModels.value(agentId, nullptr);
 }
 
 void AgentManager::startAgent(const QString &agentId, const QString &workingDir,
@@ -58,6 +65,16 @@ void AgentManager::stopAll()
     Q_EMIT activeCountChanged();
 }
 
+QStringList AgentManager::agentsForWorkspace(const QString &workspaceId) const
+{
+    QStringList result;
+    for (auto it = m_agentToWorkspace.cbegin(); it != m_agentToWorkspace.cend(); ++it) {
+        if (it.value() == workspaceId)
+            result.append(it.key());
+    }
+    return result;
+}
+
 int AgentManager::agentStatus(const QString &agentId) const
 {
     auto *agent = m_agents.value(agentId, nullptr);
@@ -88,6 +105,8 @@ int AgentManager::activeCount() const
 
 void AgentManager::connectAgent(const QString &agentId, AgentProcess *agent)
 {
+    auto *model = m_outputModels.value(agentId);
+
     connect(agent, &AgentProcess::statusChanged, this, [this, agentId, agent]() {
         Q_EMIT agentStatusChanged(agentId, agent->status());
         Q_EMIT activeCountChanged();
@@ -101,15 +120,17 @@ void AgentManager::connectAgent(const QString &agentId, AgentProcess *agent)
         Q_EMIT agentCostChanged(agentId, cost);
     });
 
-    connect(agent, &AgentProcess::assistantText, this, [this, agentId](const QString &text) {
-        Q_EMIT agentOutput(agentId, 0, text, QString()); // TextLine = 0
+    connect(agent, &AgentProcess::assistantText, this, [this, agentId, model](const QString &text) {
+        if (model) model->appendText(text);
+        Q_EMIT agentOutput(agentId, 0, text, QString());
     });
 
-    connect(agent, &AgentProcess::thinkingText, this, [this, agentId](const QString &text) {
-        Q_EMIT agentOutput(agentId, 1, text, QString()); // ThinkingLine = 1
+    connect(agent, &AgentProcess::thinkingText, this, [this, agentId, model](const QString &text) {
+        if (model) model->appendThinking(text);
+        Q_EMIT agentOutput(agentId, 1, text, QString());
     });
 
-    connect(agent, &AgentProcess::toolUse, this, [this, agentId](const QString &toolName, const QJsonObject &input) {
+    connect(agent, &AgentProcess::toolUse, this, [this, agentId, model](const QString &toolName, const QJsonObject &input) {
         QString summary = toolName;
         if (input.contains(QStringLiteral("command")))
             summary += QStringLiteral(": ") + input[QStringLiteral("command")].toString();
@@ -117,24 +138,18 @@ void AgentManager::connectAgent(const QString &agentId, AgentProcess *agent)
             summary += QStringLiteral(": ") + input[QStringLiteral("file_path")].toString();
         else if (input.contains(QStringLiteral("pattern")))
             summary += QStringLiteral(": ") + input[QStringLiteral("pattern")].toString();
-        Q_EMIT agentOutput(agentId, 2, summary, toolName); // ToolUseLine = 2
+        if (model) model->appendToolUse(toolName, summary);
+        Q_EMIT agentOutput(agentId, 2, summary, toolName);
     });
 
-    connect(agent, &AgentProcess::toolResult, this, [this, agentId](const QString &toolName, const QString &output) {
-        Q_EMIT agentOutput(agentId, 3, output, toolName); // ToolResultLine = 3
+    connect(agent, &AgentProcess::toolResult, this, [this, agentId, model](const QString &toolName, const QString &output) {
+        if (model) model->appendToolResult(toolName, output);
+        Q_EMIT agentOutput(agentId, 3, output, toolName);
     });
 
-    connect(agent, &AgentProcess::initialized, this, [this, agentId](const QJsonObject &info) {
-        QString sessionId = info[QStringLiteral("session_id")].toString();
-        Q_EMIT agentOutput(agentId, 4, QStringLiteral("Agent initialized (session: %1)").arg(sessionId), QString());
-    });
-
-    connect(agent, &AgentProcess::resultReady, this, [this, agentId, agent](const QJsonObject &) {
-        Q_EMIT agentOutput(agentId, 4, QStringLiteral("Completed. Cost: $%1").arg(agent->totalCost(), 0, 'f', 4), QString());
-    });
-
-    connect(agent, &AgentProcess::errorOccurred, this, [this, agentId](const QString &error) {
-        Q_EMIT agentOutput(agentId, 5, error, QString()); // ErrorLine = 5
+    connect(agent, &AgentProcess::errorOccurred, this, [this, agentId, model](const QString &error) {
+        if (model) model->appendError(error);
+        Q_EMIT agentOutput(agentId, 5, error, QString());
         Q_EMIT agentError(agentId, error);
     });
 

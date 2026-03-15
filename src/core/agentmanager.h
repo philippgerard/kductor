@@ -5,6 +5,7 @@
 #include <QString>
 
 class AgentProcess;
+class AgentOutputModel;
 
 class AgentManager : public QObject
 {
@@ -22,6 +23,8 @@ public:
     Q_INVOKABLE void stopAgent(const QString &agentId);
     Q_INVOKABLE void stopAll();
 
+    Q_INVOKABLE QStringList agentsForWorkspace(const QString &workspaceId) const;
+    Q_INVOKABLE AgentOutputModel *outputModel(const QString &agentId) const;
     Q_INVOKABLE int agentStatus(const QString &agentId) const;
     Q_INVOKABLE QString agentActivity(const QString &agentId) const;
     Q_INVOKABLE double agentCost(const QString &agentId) const;
@@ -42,6 +45,7 @@ Q_SIGNALS:
 
 private:
     QHash<QString, AgentProcess *> m_agents;
+    QHash<QString, AgentOutputModel *> m_outputModels;
     QHash<QString, QString> m_agentToWorkspace;
 
     void connectAgent(const QString &agentId, AgentProcess *agent);
