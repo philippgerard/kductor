@@ -78,7 +78,8 @@ Kirigami.Page {
             operationBusy = false;
             if (op === "archive") {
                 WorkspaceModel.remove(workspaceId);
-                applicationWindow().pageStack.pop();
+                applicationWindow().selectedWorkspaceId = "";
+                applicationWindow().selectedWorkspaceName = "";
                 applicationWindow().showPassiveNotification(i18n("Workspace archived."));
                 return;
             }
