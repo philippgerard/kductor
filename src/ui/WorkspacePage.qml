@@ -275,38 +275,27 @@ Kirigami.Page {
 
     // --- Dialogs ---
 
-    // PR creation dialog
+    // PR creation — uses Kirigami.Dialog with proper sizing
     Kirigami.Dialog {
         id: prDialog
         title: i18n("Create Pull Request")
-        preferredWidth: Kirigami.Units.gridUnit * 28
+        preferredWidth: Kirigami.Units.gridUnit * 30
+        padding: Kirigami.Units.largeSpacing
 
-        ColumnLayout {
-            spacing: Kirigami.Units.largeSpacing
-
-            Kirigami.FormLayout {
-                QQC2.TextField {
-                    id: prTitleField
-                    Kirigami.FormData.label: i18n("Title:")
-                    text: workspaceName
-                    Layout.fillWidth: true
-                }
-
-                QQC2.TextArea {
-                    id: prBodyField
-                    Kirigami.FormData.label: i18n("Description:")
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Kirigami.Units.gridUnit * 6
-                    placeholderText: i18n("Describe the changes…")
-                    wrapMode: TextEdit.Wrap
-                }
+        Kirigami.FormLayout {
+            QQC2.TextField {
+                id: prTitleField
+                Kirigami.FormData.label: i18n("Title:")
+                text: workspaceName
             }
 
-            Kirigami.InlineMessage {
+            QQC2.TextArea {
+                id: prBodyField
+                Kirigami.FormData.label: i18n("Description:")
                 Layout.fillWidth: true
-                type: Kirigami.MessageType.Information
-                text: i18n("This will push the branch and create a PR on GitHub.")
-                visible: true
+                Layout.preferredHeight: Kirigami.Units.gridUnit * 8
+                placeholderText: i18n("Describe the changes…")
+                wrapMode: TextEdit.Wrap
             }
         }
 
@@ -317,7 +306,6 @@ Kirigami.Page {
                 enabled: prTitleField.text.length > 0 && !operationBusy
                 onTriggered: {
                     prDialog.close();
-                    // Push first, then create PR on success
                     let title = prTitleField.text;
                     let body = prBodyField.text;
                     pushThenPR(title, body);
@@ -326,51 +314,34 @@ Kirigami.Page {
         ]
     }
 
-    // Push then create PR (sequential async)
     function pushThenPR(title, body) {
-        let conn = null;
-        let errConn = null;
-
-        function cleanup() {
-            if (conn) WorktreeManager.operationSucceeded.disconnect(onPushDone);
-            if (errConn) WorktreeManager.operationFailed.disconnect(onPushFail);
-        }
         function onPushDone(op, result) {
             if (op !== "push") return;
-            cleanup();
+            WorktreeManager.operationSucceeded.disconnect(onPushDone);
+            WorktreeManager.operationFailed.disconnect(onPushFail);
             WorktreeManager.createPullRequest(worktreePath, title, body);
         }
         function onPushFail(op, error) {
             if (op !== "push") return;
-            cleanup();
+            WorktreeManager.operationSucceeded.disconnect(onPushDone);
+            WorktreeManager.operationFailed.disconnect(onPushFail);
         }
-
         WorktreeManager.operationSucceeded.connect(onPushDone);
         WorktreeManager.operationFailed.connect(onPushFail);
         WorktreeManager.pushBranch(worktreePath);
     }
 
-    // Merge PR dialog
-    Kirigami.Dialog {
+    // Simple confirmations — PromptDialog (native KDE message boxes)
+
+    Kirigami.PromptDialog {
         id: mergePrDialog
         title: i18n("Merge Pull Request")
-        preferredWidth: Kirigami.Units.gridUnit * 22
-
-        ColumnLayout {
-            spacing: Kirigami.Units.largeSpacing
-
-            QQC2.Label {
-                Layout.fillWidth: true
-                wrapMode: Text.Wrap
-                text: i18n("This will merge the pull request on GitHub and delete the remote branch.")
-            }
-        }
-
+        subtitle: i18n("Merge and delete the remote branch on GitHub?")
+        standardButtons: Kirigami.Dialog.Cancel
         customFooterActions: [
             Kirigami.Action {
                 text: i18n("Merge PR")
                 icon.name: "vcs-merge"
-                enabled: !operationBusy
                 onTriggered: {
                     mergePrDialog.close();
                     WorktreeManager.mergePullRequest(worktreePath);
@@ -379,27 +350,15 @@ Kirigami.Page {
         ]
     }
 
-    // Local merge dialog
-    Kirigami.Dialog {
+    Kirigami.PromptDialog {
         id: mergeLocalDialog
         title: i18n("Merge Locally")
-        preferredWidth: Kirigami.Units.gridUnit * 22
-
-        ColumnLayout {
-            spacing: Kirigami.Units.largeSpacing
-
-            QQC2.Label {
-                Layout.fillWidth: true
-                wrapMode: Text.Wrap
-                text: i18n("Merge branch '%1' into '%2' in the local repository.\n\nThis will checkout '%2' and merge.", branchName, sourceBranch)
-            }
-        }
-
+        subtitle: i18n("Merge '%1' into '%2'?", branchName, sourceBranch)
+        standardButtons: Kirigami.Dialog.Cancel
         customFooterActions: [
             Kirigami.Action {
                 text: i18n("Merge")
                 icon.name: "vcs-merge"
-                enabled: !operationBusy
                 onTriggered: {
                     mergeLocalDialog.close();
                     WorktreeManager.mergeToSource(repoPath, branchName, sourceBranch);
@@ -408,29 +367,17 @@ Kirigami.Page {
         ]
     }
 
-    // Archive dialog
-    Kirigami.Dialog {
+    Kirigami.PromptDialog {
         id: archiveDialog
         title: i18n("Archive Workspace")
-        preferredWidth: Kirigami.Units.gridUnit * 22
-
-        ColumnLayout {
-            spacing: Kirigami.Units.largeSpacing
-
-            QQC2.Label {
-                Layout.fillWidth: true
-                wrapMode: Text.Wrap
-                text: i18n("This will remove the worktree and delete the workspace. Agent sessions will be lost.\n\nThe branch '%1' will remain in the repository.", branchName)
-            }
-        }
-
+        subtitle: i18n("Remove worktree and agent sessions? The branch '%1' will remain.", branchName)
+        standardButtons: Kirigami.Dialog.Cancel
         customFooterActions: [
             Kirigami.Action {
                 text: i18n("Archive")
                 icon.name: "archive-remove"
                 onTriggered: {
                     archiveDialog.close();
-                    // Stop all agents for this workspace
                     for (let a of agents) AgentManager.removeAgent(a.id);
                     WorktreeManager.archiveWorkspace(worktreePath, repoPath);
                 }
