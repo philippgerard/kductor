@@ -151,7 +151,7 @@ Kirigami.ApplicationWindow {
                                             readonly property bool agentsRunning: AgentManager.activeCount >= 0 && AgentManager.workspaceAgentStatus(wsDelegate.workspaceId) === 2
 
                                             color: {
-                                                if (agentsRunning) return Kirigami.Theme.focusColor;
+                                                if (agentsRunning) return Kirigami.Theme.highlightedTextColor;
                                                 if (hasAgents) return Kirigami.Theme.positiveTextColor;
                                                 if (wsDelegate.status === 2) return Kirigami.Theme.disabledTextColor;
                                                 return Kirigami.Theme.disabledTextColor;

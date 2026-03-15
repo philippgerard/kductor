@@ -98,61 +98,8 @@ Kirigami.Page {
     }
 
     // --- Actions ---
-    actions: [
-        Kirigami.Action {
-            text: i18n("Add Agent")
-            icon.name: "list-add-symbolic"
-            onTriggered: addAgent()
-        },
-        Kirigami.Action {
-            text: showingDiff ? i18n("Agents") : i18n("Diff")
-            icon.name: showingDiff ? "system-run-symbolic" : "vcs-diff"
-            shortcut: "Ctrl+D"
-            onTriggered: {
-                showingDiff = !showingDiff;
-                if (showingDiff) diffViewer.reload();
-            }
-        },
-        Kirigami.Action {
-            text: forge === "github" ? i18n("Push & PR") : i18n("Push")
-            icon.name: "vcs-push"
-            enabled: !operationBusy
-            onTriggered: {
-                if (forge === "github") {
-                    pushThenPR();
-                } else {
-                    pushThenOpenWeb();
-                }
-            }
-        },
-        Kirigami.Action {
-            text: i18n("Merge")
-            icon.name: "vcs-merge"
-            enabled: !operationBusy
-            children: [
-                Kirigami.Action {
-                    text: i18n("Merge PR (remote)")
-                    icon.name: "vcs-merge"
-                    visible: forge === "github"
-                    enabled: !operationBusy
-                    onTriggered: mergePrDialog.open()
-                },
-                Kirigami.Action {
-                    text: i18n("Merge locally to %1", sourceBranch)
-                    icon.name: "vcs-merge"
-                    enabled: !operationBusy
-                    onTriggered: mergeLocalDialog.open()
-                },
-                Kirigami.Action { separator: true },
-                Kirigami.Action {
-                    text: i18n("Archive workspace")
-                    icon.name: "archive-remove"
-                    enabled: !operationBusy
-                    onTriggered: archiveDialog.open()
-                }
-            ]
-        }
-    ]
+    // Keyboard shortcuts
+    Shortcut { sequence: "Ctrl+D"; onActivated: { showingDiff = !showingDiff; if (showingDiff) diffViewer.reload(); } }
 
     // --- Header ---
     header: ColumnLayout {
@@ -185,9 +132,56 @@ Kirigami.Page {
                     elide: Text.ElideMiddle
                     Layout.fillWidth: true
                 }
-                QQC2.Label {
-                    text: i18np("%1 agent", "%1 agents", agents.length)
-                    opacity: 0.7
+
+                Kirigami.Separator { Layout.fillHeight: true }
+
+                QQC2.ToolButton {
+                    icon.name: "list-add-symbolic"
+                    text: i18n("Agent")
+                    display: QQC2.AbstractButton.TextBesideIcon
+                    onClicked: addAgent()
+                }
+                QQC2.ToolButton {
+                    icon.name: showingDiff ? "system-run-symbolic" : "vcs-diff"
+                    text: showingDiff ? i18n("Agents") : i18n("Diff")
+                    display: QQC2.AbstractButton.TextBesideIcon
+                    onClicked: { showingDiff = !showingDiff; if (showingDiff) diffViewer.reload(); }
+                }
+                QQC2.ToolButton {
+                    icon.name: "vcs-push"
+                    text: forge === "github" ? i18n("Push & PR") : i18n("Push")
+                    display: QQC2.AbstractButton.TextBesideIcon
+                    enabled: !operationBusy
+                    onClicked: forge === "github" ? pushThenPR() : pushThenOpenWeb()
+                }
+                QQC2.ToolButton {
+                    id: mergeButton
+                    icon.name: "vcs-merge"
+                    text: i18n("Merge")
+                    display: QQC2.AbstractButton.TextBesideIcon
+                    enabled: !operationBusy
+                    onClicked: mergeMenu.popup(mergeButton, 0, mergeButton.height)
+
+                    QQC2.Menu {
+                        id: mergeMenu
+                        QQC2.MenuItem {
+                            text: i18n("Merge PR (remote)")
+                            icon.name: "vcs-merge"
+                            visible: forge === "github"
+                            onTriggered: mergePrDialog.open()
+                        }
+                        QQC2.MenuItem {
+                            text: i18n("Merge locally to %1", sourceBranch)
+                            icon.name: "vcs-merge"
+                            onTriggered: mergeLocalDialog.open()
+                        }
+                        QQC2.MenuSeparator {}
+                        QQC2.MenuItem {
+                            text: i18n("Archive workspace")
+                            icon.name: "archive-remove"
+                            onTriggered: archiveDialog.open()
+                        }
+                    }
                 }
             }
         }
