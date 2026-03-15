@@ -185,30 +185,51 @@ Kirigami.Page {
                     display: QQC2.AbstractButton.TextBesideIcon
                     onClicked: { showingDiff = !showingDiff; if (showingDiff) diffViewer.reload(); }
                 }
-                QQC2.ToolButton {
+                QQC2.AbstractButton {
                     visible: remoteAvailable
                     enabled: !operationBusy
-                    display: QQC2.AbstractButton.TextBesideIcon
+                    padding: Kirigami.Units.smallSpacing
+                    hoverEnabled: true
 
-                    icon.name: {
-                        if (prState === "OPEN") return "vcs-merge";
-                        if (prState === "MERGED") return "vcs-push";
-                        return "vcs-push";
-                    }
-                    text: {
-                        if (prState === "OPEN") return i18n("PR #%1", prNumber);
-                        if (prState === "MERGED") return forge === "github" ? i18n("Push & PR") : i18n("Push");
-                        if (prState === "CLOSED") return forge === "github" ? i18n("Push & PR") : i18n("Push");
-                        return forge === "github" ? i18n("Push & PR") : i18n("Push");
-                    }
-
-                    // Color the icon based on PR status
-                    Kirigami.Theme.textColor: {
+                    readonly property color prColor: {
                         if (prState !== "OPEN") return Kirigami.Theme.textColor;
                         if (prChecks === "success" && prMergeable === "MERGEABLE") return Kirigami.Theme.positiveTextColor;
                         if (prChecks === "failure" || prMergeable === "CONFLICTING") return Kirigami.Theme.negativeTextColor;
                         if (prChecks === "pending") return Kirigami.Theme.neutralTextColor;
-                        return Kirigami.Theme.textColor;
+                        return Kirigami.Theme.focusColor;
+                    }
+
+                    contentItem: RowLayout {
+                        spacing: Kirigami.Units.smallSpacing
+
+                        // Status dot for open PRs
+                        Rectangle {
+                            visible: prState === "OPEN"
+                            width: Kirigami.Units.smallSpacing * 2.5
+                            height: width
+                            radius: width / 2
+                            color: prColor
+                        }
+
+                        Kirigami.Icon {
+                            visible: prState !== "OPEN"
+                            source: "vcs-push"
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                        }
+
+                        QQC2.Label {
+                            text: {
+                                if (prState === "OPEN") return i18n("PR #%1", prNumber);
+                                return forge === "github" ? i18n("Push & PR") : i18n("Push");
+                            }
+                            color: prState === "OPEN" ? prColor : Kirigami.Theme.textColor
+                        }
+                    }
+
+                    background: Rectangle {
+                        color: parent.hovered ? Kirigami.Theme.highlightColor.alpha(0.1) : "transparent"
+                        radius: Kirigami.Units.smallSpacing
                     }
 
                     onClicked: {
