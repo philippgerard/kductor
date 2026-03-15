@@ -58,5 +58,6 @@ add_subdirectory(src)
 install(PROGRAMS org.kde.kductor.desktop DESTINATION ${KDE_INSTALL_APPDIR})
 install(FILES org.kde.kductor.notifyrc DESTINATION ${KDE_INSTALL_KNOTIFYRCDIR})
 install(FILES icons/kductor.svg DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps)
+install(FILES icons/kductor-dark.svg DESTINATION ${KDE_INSTALL_ICONDIR}/breeze-dark/apps/48 RENAME kductor.svg)
 
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)

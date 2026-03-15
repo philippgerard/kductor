@@ -42,9 +42,14 @@ int main(int argc, char *argv[])
     );
     about.setDesktopFileName(QStringLiteral("org.kde.kductor"));
     KAboutData::setApplicationData(about);
+    // Pick the right icon variant for the current color scheme
+    bool isDark = qApp->palette().window().color().lightnessF() < 0.5;
+    QString iconPath = isDark
+        ? QStringLiteral("%1/.local/share/icons/breeze-dark/apps/48/kductor.svg")
+        : QStringLiteral("%1/.local/share/icons/hicolor/scalable/apps/kductor.svg");
     QIcon appIcon = QIcon::fromTheme(QStringLiteral("kductor"));
     if (appIcon.isNull())
-        appIcon = QIcon(QStringLiteral("%1/.local/share/icons/hicolor/scalable/apps/kductor.svg").arg(QDir::homePath()));
+        appIcon = QIcon(iconPath.arg(QDir::homePath()));
     QApplication::setWindowIcon(appIcon);
 
     KCrash::initialize();
