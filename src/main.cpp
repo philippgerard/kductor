@@ -1,8 +1,9 @@
+#include <QAction>
 #include <QApplication>
+#include <QDir>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
-#include <QQuickWindow>
 #include <QIcon>
 
 #include <KAboutData>
@@ -40,7 +41,10 @@ int main(int argc, char *argv[])
     );
     about.setDesktopFileName(QStringLiteral("org.kde.kductor"));
     KAboutData::setApplicationData(about);
-    QApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("kductor")));
+    QIcon appIcon = QIcon::fromTheme(QStringLiteral("kductor"));
+    if (appIcon.isNull())
+        appIcon = QIcon(QStringLiteral("%1/.local/share/icons/hicolor/scalable/apps/kductor.svg").arg(QDir::homePath()));
+    QApplication::setWindowIcon(appIcon);
 
     KCrash::initialize();
     KDBusService service(KDBusService::Unique);
@@ -56,34 +60,39 @@ int main(int argc, char *argv[])
 
     // --- System tray ---
     auto *tray = new KStatusNotifierItem(QStringLiteral("kductor"), &app);
-    tray->setIconByName(QStringLiteral("kductor"));
+    tray->setIconByPixmap(appIcon);
+    tray->setToolTipIconByPixmap(appIcon);
     tray->setCategory(KStatusNotifierItem::ApplicationStatus);
-    tray->setStatus(KStatusNotifierItem::Passive);
+    tray->setStandardActionsEnabled(true);
+    tray->setStatus(KStatusNotifierItem::Active);
     tray->setToolTipTitle(i18n("Kductor"));
     tray->setToolTipSubTitle(i18n("No agents running"));
 
-    // Update tray status based on active agents
+    // Context menu actions
+    auto *stopAllAction = new QAction(QIcon::fromTheme(QStringLiteral("media-playback-stop-symbolic")),
+                                      i18n("Stop All Agents"), tray);
+    stopAllAction->setEnabled(false);
+    QObject::connect(stopAllAction, &QAction::triggered, agentManager, &AgentManager::stopAll);
+    tray->contextMenu()->insertAction(tray->contextMenu()->actions().first(), stopAllAction);
+
+    // Update tray status and menu based on active agents
     QObject::connect(agentManager, &AgentManager::activeCountChanged, tray, [=]() {
         int count = agentManager->activeCount();
+        stopAllAction->setEnabled(count > 0);
         if (count > 0) {
             tray->setStatus(KStatusNotifierItem::Active);
             tray->setToolTipSubTitle(i18np("%1 agent running", "%1 agents running", count));
+            stopAllAction->setText(i18np("Stop %1 Agent", "Stop All %1 Agents", count));
         } else {
-            tray->setStatus(KStatusNotifierItem::Passive);
+            tray->setStatus(KStatusNotifierItem::Active);
             tray->setToolTipSubTitle(i18n("No agents running"));
+            stopAllAction->setText(i18n("Stop All Agents"));
         }
     });
 
     // Flash tray on agent error
     QObject::connect(agentManager, &AgentManager::agentError, tray, [=](const QString &, const QString &) {
         tray->setStatus(KStatusNotifierItem::NeedsAttention);
-    });
-
-    // Toggle tray visibility based on setting
-    QObject::connect(agentManager, &AgentManager::showInTrayChanged, tray, [=]() {
-        tray->setStatus(agentManager->showInTray() ? KStatusNotifierItem::Passive : KStatusNotifierItem::Passive);
-        // KStatusNotifierItem doesn't have a hide method; it's always registered.
-        // The setting is respected by checking it before showing notifications.
     });
 
     // --- Notifications ---
