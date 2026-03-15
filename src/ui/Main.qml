@@ -93,109 +93,146 @@ Kirigami.ApplicationWindow {
                     anchors.fill: parent
                     spacing: 0
 
-                    // Sidebar header
-                    QQC2.ToolBar {
-                        Layout.fillWidth: true
-                        contentItem: RowLayout {
-                            QQC2.Label {
-                                text: i18n("Workspaces")
-                                font.bold: true
-                                Layout.fillWidth: true
-                            }
-                            QQC2.ToolButton {
-                                icon.name: "list-add-symbolic"
-                                onClicked: createSheet.open()
-                                QQC2.ToolTip.text: i18n("New Workspace")
-                                QQC2.ToolTip.visible: hovered
-                            }
-                        }
-                    }
-
-                    // Workspace list
+                    // Grouped repo → workspace list
                     QQC2.ScrollView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
 
-                        ListView {
-                            id: workspaceList
-                            model: WorkspaceModel
+                        Flickable {
+                            contentWidth: availableWidth
+                            contentHeight: sidebarContent.implicitHeight
                             clip: true
 
-                            delegate: QQC2.ItemDelegate {
-                                id: wsDelegate
-                                width: workspaceList.width
-                                highlighted: workspaceId === selectedWorkspaceId
+                            ColumnLayout {
+                                id: sidebarContent
+                                width: parent.width
+                                spacing: 0
 
-                                required property int index
-                                required property string workspaceId
-                                required property string name
-                                required property string branchName
-                                required property int status
+                                // Rebuild when model changes
+                                property var repos: WorkspaceModel.count >= 0 ? WorkspaceModel.uniqueRepoPaths() : []
 
-                                contentItem: ColumnLayout {
-                                    spacing: 2
+                                Repeater {
+                                    model: sidebarContent.repos
 
-                                    RowLayout {
+                                    ColumnLayout {
+                                        id: repoSection
                                         Layout.fillWidth: true
-                                        spacing: Kirigami.Units.smallSpacing
+                                        spacing: 0
 
-                                        // Status dot
-                                        Rectangle {
-                                            id: statusDot
-                                            width: Kirigami.Units.smallSpacing * 2
-                                            height: width
-                                            radius: width / 2
+                                        required property string modelData
+                                        readonly property string repoName: modelData.split("/").pop()
+                                        property var workspaces: WorkspaceModel.count >= 0 ? WorkspaceModel.workspacesForRepo(modelData) : []
 
-                                            readonly property bool hasAgents: AgentManager.activeCount >= 0 && AgentManager.agentsForWorkspace(wsDelegate.workspaceId).length > 0
-                                            readonly property bool agentsRunning: AgentManager.activeCount >= 0 && AgentManager.workspaceAgentStatus(wsDelegate.workspaceId) === 2
-
-                                            color: {
-                                                if (agentsRunning) return Kirigami.Theme.highlightedTextColor;
-                                                if (hasAgents) return Kirigami.Theme.positiveTextColor;
-                                                if (wsDelegate.status === 2) return Kirigami.Theme.disabledTextColor;
-                                                return Kirigami.Theme.disabledTextColor;
-                                            }
-                                            opacity: (!hasAgents && wsDelegate.status !== 2) ? 0.4 : 1.0
-
-                                            SequentialAnimation on opacity {
-                                                running: statusDot.agentsRunning
-                                                loops: Animation.Infinite
-                                                NumberAnimation { to: 0.3; duration: 800; easing.type: Easing.InOutQuad }
-                                                NumberAnimation { to: 1.0; duration: 800; easing.type: Easing.InOutQuad }
-                                            }
-                                        }
-
-                                        QQC2.Label {
-                                            text: wsDelegate.name
-                                            elide: Text.ElideRight
+                                        // Repo header
+                                        QQC2.ItemDelegate {
                                             Layout.fillWidth: true
-                                            font.bold: wsDelegate.workspaceId === selectedWorkspaceId
+                                            contentItem: RowLayout {
+                                                spacing: Kirigami.Units.smallSpacing
+                                                Kirigami.Icon {
+                                                    source: "folder-git-symbolic"
+                                                    Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                                                    Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                                                    opacity: 0.7
+                                                }
+                                                QQC2.Label {
+                                                    text: repoSection.repoName
+                                                    font.bold: true
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                                QQC2.ToolButton {
+                                                    icon.name: "list-add-symbolic"
+                                                    implicitWidth: Kirigami.Units.iconSizes.medium
+                                                    implicitHeight: Kirigami.Units.iconSizes.medium
+                                                    onClicked: createSheet.openForRepo(repoSection.modelData)
+                                                    QQC2.ToolTip.text: i18n("New workspace")
+                                                    QQC2.ToolTip.visible: hovered
+                                                }
+                                            }
                                         }
-                                    }
 
-                                    QQC2.Label {
-                                        text: wsDelegate.branchName
-                                        font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                        opacity: 0.5
-                                        elide: Text.ElideRight
-                                        Layout.fillWidth: true
-                                        Layout.leftMargin: Kirigami.Units.smallSpacing * 2 + Kirigami.Units.smallSpacing
+                                        // Workspaces under this repo
+                                        Repeater {
+                                            model: repoSection.workspaces
+
+                                            QQC2.ItemDelegate {
+                                                id: wsItem
+                                                Layout.fillWidth: true
+                                                highlighted: modelData.id === selectedWorkspaceId
+                                                leftPadding: Kirigami.Units.largeSpacing * 2
+
+                                                contentItem: RowLayout {
+                                                    spacing: Kirigami.Units.smallSpacing
+
+                                                    Rectangle {
+                                                        id: wsDot
+                                                        width: Kirigami.Units.smallSpacing * 2
+                                                        height: width
+                                                        radius: width / 2
+
+                                                        readonly property bool hasAgents: AgentManager.activeCount >= 0 && AgentManager.agentsForWorkspace(modelData.id).length > 0
+                                                        readonly property bool agentsRunning: AgentManager.activeCount >= 0 && AgentManager.workspaceAgentStatus(modelData.id) === 2
+
+                                                        color: {
+                                                            if (agentsRunning) return Kirigami.Theme.highlightedTextColor;
+                                                            if (hasAgents) return Kirigami.Theme.positiveTextColor;
+                                                            return Kirigami.Theme.disabledTextColor;
+                                                        }
+                                                        opacity: (!hasAgents) ? 0.4 : 1.0
+
+                                                        SequentialAnimation on opacity {
+                                                            running: wsDot.agentsRunning
+                                                            loops: Animation.Infinite
+                                                            NumberAnimation { to: 0.3; duration: 800; easing.type: Easing.InOutQuad }
+                                                            NumberAnimation { to: 1.0; duration: 800; easing.type: Easing.InOutQuad }
+                                                        }
+                                                    }
+
+                                                    QQC2.Label {
+                                                        text: modelData.name
+                                                        elide: Text.ElideRight
+                                                        Layout.fillWidth: true
+                                                        font.bold: modelData.id === selectedWorkspaceId
+                                                    }
+                                                }
+
+                                                onClicked: {
+                                                    selectedWorkspaceId = modelData.id;
+                                                    selectedWorkspaceName = modelData.name;
+                                                    workspaceLoader.setSource(Qt.resolvedUrl("WorkspacePage.qml"), {
+                                                        workspaceId: modelData.id,
+                                                        workspaceName: modelData.name,
+                                                        worktreePath: modelData.worktreePath,
+                                                        branchName: modelData.branchName,
+                                                        sourceBranch: modelData.sourceBranch,
+                                                        repoPath: modelData.repoPath
+                                                    });
+                                                }
+                                            }
+                                        }
                                     }
                                 }
 
-                                onClicked: {
-                                    let wsData = WorkspaceModel.get(wsDelegate.index);
-                                    selectedWorkspaceId = wsData.id;
-                                    selectedWorkspaceName = wsData.name;
-                                    workspaceLoader.setSource(Qt.resolvedUrl("WorkspacePage.qml"), {
-                                        workspaceId: wsData.id,
-                                        workspaceName: wsData.name,
-                                        worktreePath: wsData.worktreePath,
-                                        branchName: wsData.branchName,
-                                        sourceBranch: wsData.sourceBranch,
-                                        repoPath: wsData.repoPath
-                                    });
+                                // Add repository button at bottom
+                                QQC2.ItemDelegate {
+                                    Layout.fillWidth: true
+                                    Layout.topMargin: Kirigami.Units.smallSpacing
+                                    contentItem: RowLayout {
+                                        spacing: Kirigami.Units.smallSpacing
+                                        Kirigami.Icon {
+                                            source: "list-add-symbolic"
+                                            Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                                            Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                                            opacity: 0.5
+                                        }
+                                        QQC2.Label {
+                                            text: i18n("Add repository")
+                                            opacity: 0.5
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+                                    onClicked: createSheet.open()
                                 }
                             }
                         }

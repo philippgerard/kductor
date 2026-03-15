@@ -14,15 +14,37 @@ Kirigami.Dialog {
     signal accepted()
 
     property string selectedRepo: ""
+    property string prefillRepo: ""
     property var branches: []
     property string errorMessage: ""
 
+    function openForRepo(repoPath) {
+        prefillRepo = repoPath;
+        open();
+    }
+
     onOpened: {
         nameField.text = "";
-        repoPathField.text = "";
-        selectedRepo = "";
-        branchCombo.model = [];
         errorMessage = "";
+        if (prefillRepo.length > 0) {
+            selectedRepo = prefillRepo;
+            repoPathField.text = prefillRepo;
+            prefillRepo = "";
+            // Load branches for pre-filled repo
+            if (GitManager.openRepository(selectedRepo)) {
+                branches = GitManager.listBranches();
+                branchCombo.model = branches;
+                if (branches.length > 0) {
+                    let mainIdx = branches.indexOf("main");
+                    if (mainIdx < 0) mainIdx = branches.indexOf("master");
+                    if (mainIdx >= 0) branchCombo.currentIndex = mainIdx;
+                }
+            }
+        } else {
+            selectedRepo = "";
+            repoPathField.text = "";
+            branchCombo.model = [];
+        }
         nameField.forceActiveFocus();
     }
 

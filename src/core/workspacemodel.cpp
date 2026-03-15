@@ -114,6 +114,27 @@ void WorkspaceModel::updateStatus(const QString &id, int status)
     }
 }
 
+QStringList WorkspaceModel::uniqueRepoPaths() const
+{
+    QStringList result;
+    for (const auto &ws : m_workspaces) {
+        if (!result.contains(ws.repoPath))
+            result.append(ws.repoPath);
+    }
+    return result;
+}
+
+QVariantList WorkspaceModel::workspacesForRepo(const QString &repoPath) const
+{
+    QVariantList result;
+    for (int i = 0; i < m_workspaces.size(); ++i) {
+        if (m_workspaces[i].repoPath == repoPath) {
+            result.append(get(i));
+        }
+    }
+    return result;
+}
+
 void WorkspaceModel::addWorkspace(const Workspace &ws)
 {
     beginInsertRows(QModelIndex(), m_workspaces.size(), m_workspaces.size());
