@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
         i18n("Kductor"),
         QStringLiteral(KDUCTOR_VERSION_STRING),
         i18n("AI Agent Orchestrator"),
-        KAboutLicense::GPL_V3,
+        KAboutLicense::MIT,
         i18n("(c) 2026")
     );
     about.setDesktopFileName(QStringLiteral("org.kde.kductor"));
