@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Kductor
+GenericName=AI Agent Orchestrator
+Comment=Orchestrate multiple AI coding agents in parallel
+Exec=kductor
+Icon=kductor
+Type=Application
+Terminal=false
+Categories=Development;IDE;
+Keywords=ai;agent;claude;code;worktree;
+StartupNotify=true
+X-KDE-FormFactor=desktop
