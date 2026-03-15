@@ -1,10 +1,17 @@
 #include "workspacemodel.h"
 #include "worktreemanager.h"
 
+#include <QDir>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QStandardPaths>
+
 WorkspaceModel::WorkspaceModel(WorktreeManager *worktreeManager, QObject *parent)
     : QAbstractListModel(parent)
     , m_worktreeManager(worktreeManager)
 {
+    loadRepos();
     refresh();
 }
 
@@ -117,11 +124,60 @@ void WorkspaceModel::updateStatus(const QString &id, int status)
 QStringList WorkspaceModel::uniqueRepoPaths() const
 {
     QStringList result;
+    // Include standalone repos first
+    for (const auto &repo : m_standaloneRepos) {
+        if (!result.contains(repo))
+            result.append(repo);
+    }
+    // Then repos from workspaces
     for (const auto &ws : m_workspaces) {
         if (!result.contains(ws.repoPath))
             result.append(ws.repoPath);
     }
     return result;
+}
+
+static QString reposFilePath()
+{
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir().mkpath(dir);
+    return dir + QStringLiteral("/repos.json");
+}
+
+void WorkspaceModel::loadRepos()
+{
+    QFile file(reposFilePath());
+    if (!file.open(QIODevice::ReadOnly))
+        return;
+    QJsonArray arr = QJsonDocument::fromJson(file.readAll()).array();
+    for (const auto &v : arr)
+        m_standaloneRepos.append(v.toString());
+}
+
+void WorkspaceModel::saveRepos()
+{
+    QJsonArray arr;
+    for (const auto &r : m_standaloneRepos)
+        arr.append(r);
+    QFile file(reposFilePath());
+    if (file.open(QIODevice::WriteOnly))
+        file.write(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+}
+
+void WorkspaceModel::addRepo(const QString &repoPath)
+{
+    if (!m_standaloneRepos.contains(repoPath)) {
+        m_standaloneRepos.append(repoPath);
+        saveRepos();
+        Q_EMIT countChanged(); // triggers sidebar rebuild
+    }
+}
+
+void WorkspaceModel::removeRepo(const QString &repoPath)
+{
+    m_standaloneRepos.removeAll(repoPath);
+    saveRepos();
+    Q_EMIT countChanged();
 }
 
 QVariantList WorkspaceModel::workspacesForRepo(const QString &repoPath) const

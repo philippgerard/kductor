@@ -39,6 +39,8 @@ public:
     Q_INVOKABLE void updateStatus(const QString &id, int status);
     Q_INVOKABLE QStringList uniqueRepoPaths() const;
     Q_INVOKABLE QVariantList workspacesForRepo(const QString &repoPath) const;
+    Q_INVOKABLE void addRepo(const QString &repoPath);
+    Q_INVOKABLE void removeRepo(const QString &repoPath);
 
     void addWorkspace(const Workspace &ws);
 
@@ -47,6 +49,9 @@ Q_SIGNALS:
 
 private:
     QList<Workspace> m_workspaces;
+    QStringList m_standaloneRepos;
     WorkspaceStore m_store;
     WorktreeManager *m_worktreeManager;
+    void loadRepos();
+    void saveRepos();
 };

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import org.kde.kirigami as Kirigami
 import org.kde.kductor
 
@@ -232,7 +233,7 @@ Kirigami.ApplicationWindow {
                                             Layout.fillWidth: true
                                         }
                                     }
-                                    onClicked: createSheet.open()
+                                    onClicked: addRepoDialog.open()
                                 }
                             }
                         }
@@ -278,5 +279,16 @@ Kirigami.ApplicationWindow {
     WorkspaceCreateSheet {
         id: createSheet
         onAccepted: WorkspaceModel.refresh()
+    }
+
+    FolderDialog {
+        id: addRepoDialog
+        title: i18n("Select Git Repository")
+        onAccepted: {
+            let path = selectedFolder.toString().replace("file://", "");
+            if (GitManager.openRepository(path)) {
+                WorkspaceModel.addRepo(path);
+            }
+        }
     }
 }
