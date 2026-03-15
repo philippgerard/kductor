@@ -12,7 +12,6 @@ ColumnLayout {
 
     property int agentStatus: 0
     property string agentActivity: ""
-    property double agentCost: 0.0
 
     AgentOutputModel {
         id: outputModel
@@ -29,10 +28,6 @@ ColumnLayout {
             if (id === agentPanel.agentId)
                 agentPanel.agentActivity = activity;
         }
-        function onAgentCostChanged(id, cost) {
-            if (id === agentPanel.agentId)
-                agentPanel.agentCost = cost;
-        }
         function onAgentOutput(id, lineType, content, toolName) {
             if (id !== agentPanel.agentId)
                 return;
@@ -47,36 +42,28 @@ ColumnLayout {
         }
     }
 
-    // Status bar
+    // Status bar — compact
     RowLayout {
         Layout.fillWidth: true
-        Layout.margins: Kirigami.Units.smallSpacing
+        Layout.leftMargin: Kirigami.Units.largeSpacing
+        Layout.rightMargin: Kirigami.Units.largeSpacing
+        Layout.topMargin: Kirigami.Units.smallSpacing
+        Layout.bottomMargin: Kirigami.Units.smallSpacing
+        spacing: Kirigami.Units.smallSpacing
 
         StatusBadge {
             status: agentPanel.agentStatus
         }
 
-        QQC2.Label {
-            text: agentPanel.agentActivity || i18n("Idle")
-            elide: Text.ElideRight
-            Layout.fillWidth: true
-            opacity: 0.7
-            font.italic: true
-        }
+        Item { Layout.fillWidth: true }
 
-        QQC2.Label {
-            visible: agentPanel.agentCost > 0
-            text: "$" + agentPanel.agentCost.toFixed(4)
-            opacity: 0.6
-            font.family: "monospace"
-        }
-
-        QQC2.Button {
+        QQC2.ToolButton {
             icon.name: "media-playback-stop-symbolic"
-            text: i18n("Stop")
-            visible: agentPanel.agentStatus === 2 // Running
+            visible: agentPanel.agentStatus === 2
             flat: true
             onClicked: AgentManager.stopAgent(agentPanel.agentId)
+            QQC2.ToolTip.text: i18n("Stop agent")
+            QQC2.ToolTip.visible: hovered
         }
     }
 
@@ -95,16 +82,18 @@ ColumnLayout {
         Layout.fillWidth: true
     }
 
-    // Command bar - always active
+    // Command bar
     CommandBar {
         Layout.fillWidth: true
+        Layout.leftMargin: Kirigami.Units.largeSpacing
+        Layout.rightMargin: Kirigami.Units.largeSpacing
+        Layout.topMargin: Kirigami.Units.smallSpacing
+        Layout.bottomMargin: Kirigami.Units.smallSpacing
         onPromptSubmitted: function(prompt) {
-            outputModel.appendSystem(i18n("You: %1", prompt));
+            outputModel.appendSystem(prompt);
             if (agentPanel.agentStatus === 0) {
-                // Idle - start the agent with this prompt
                 AgentManager.startAgent(agentPanel.agentId, agentPanel.workingDir, prompt, "sonnet");
             } else {
-                // Already started - send follow-up prompt
                 AgentManager.sendPrompt(agentPanel.agentId, agentPanel.workingDir, prompt, "sonnet");
             }
         }

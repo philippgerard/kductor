@@ -11,7 +11,11 @@ QQC2.ScrollView {
     ListView {
         id: listView
         clip: true
-        spacing: 2
+        spacing: 0
+        leftMargin: Kirigami.Units.largeSpacing
+        rightMargin: Kirigami.Units.largeSpacing
+        topMargin: Kirigami.Units.smallSpacing
+        bottomMargin: Kirigami.Units.smallSpacing
 
         onCountChanged: {
             Qt.callLater(function() {
@@ -19,7 +23,7 @@ QQC2.ScrollView {
             });
         }
 
-        delegate: Rectangle {
+        delegate: Item {
             id: lineDelegate
 
             required property string content
@@ -27,56 +31,97 @@ QQC2.ScrollView {
             required property string toolName
             required property int index
 
-            width: listView.width
-            height: lineContent.implicitHeight + Kirigami.Units.smallSpacing * 2
-            radius: 2
-
-            color: {
-                switch (lineType) {
-                case 0: return "transparent";                                          // Text
-                case 1: return Kirigami.Theme.backgroundColor;                         // Thinking
-                case 2: return Kirigami.Theme.focusColor.alpha(0.08);                  // ToolUse
-                case 3: return Kirigami.Theme.backgroundColor;                         // ToolResult
-                case 4: return Kirigami.Theme.highlightColor.alpha(0.05);              // System
-                case 5: return Kirigami.Theme.negativeBackgroundColor.alpha(0.1);      // Error
-                default: return "transparent";
-                }
-            }
+            width: listView.width - listView.leftMargin - listView.rightMargin
+            height: lineContent.implicitHeight
+            // lineType: 0=Text, 1=Thinking, 2=ToolUse, 3=ToolResult, 4=System, 5=Error
 
             ColumnLayout {
                 id: lineContent
-                anchors.fill: parent
-                anchors.margins: Kirigami.Units.smallSpacing
+                anchors.left: parent.left
+                anchors.right: parent.right
                 spacing: 0
 
-                // Tool use header
+                // Agent text — the primary content
                 QQC2.Label {
-                    visible: lineType === 2 && toolName.length > 0
-                    text: toolName
-                    font.bold: true
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    color: Kirigami.Theme.focusColor
-                    opacity: 0.8
-                }
-
-                // System/error prefix
-                QQC2.Label {
-                    visible: lineType === 4 || lineType === 5
-                    text: lineType === 5 ? i18n("Error") : i18n("System")
-                    font.bold: true
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                    color: lineType === 5 ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.disabledTextColor
-                }
-
-                // Main content
-                QQC2.Label {
+                    visible: lineType === 0
                     Layout.fillWidth: true
+                    Layout.topMargin: Kirigami.Units.smallSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
                     text: content
                     wrapMode: Text.Wrap
-                    font.family: lineType <= 1 ? Kirigami.Theme.defaultFont.family : "monospace"
-                    font.italic: lineType === 1 // Thinking
-                    opacity: lineType === 1 ? 0.6 : 1.0
-                    color: lineType === 5 ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+                    textFormat: Text.PlainText
+                }
+
+                // Thinking — subtle italic
+                QQC2.Label {
+                    visible: lineType === 1
+                    Layout.fillWidth: true
+                    Layout.topMargin: 2
+                    Layout.bottomMargin: 2
+                    text: content
+                    wrapMode: Text.Wrap
+                    font.italic: true
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    opacity: 0.5
+                    textFormat: Text.PlainText
+                }
+
+                // Tool use — compact mono line
+                RowLayout {
+                    visible: lineType === 2
+                    Layout.fillWidth: true
+                    Layout.topMargin: 2
+                    Layout.bottomMargin: 2
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Rectangle {
+                        width: 3
+                        Layout.fillHeight: true
+                        color: Kirigami.Theme.focusColor
+                        opacity: 0.6
+                        radius: 1
+                    }
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        text: content
+                        font.family: "monospace"
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        color: Kirigami.Theme.focusColor
+                        opacity: 0.7
+                        elide: Text.ElideRight
+                        textFormat: Text.PlainText
+                    }
+                }
+
+                // Tool result — hidden by default (too verbose)
+                Item {
+                    visible: lineType === 3
+                    height: 0
+                }
+
+                // System — small muted line
+                QQC2.Label {
+                    visible: lineType === 4
+                    Layout.fillWidth: true
+                    Layout.topMargin: Kirigami.Units.smallSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    text: content
+                    wrapMode: Text.Wrap
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    opacity: 0.45
+                    textFormat: Text.PlainText
+                }
+
+                // Error
+                QQC2.Label {
+                    visible: lineType === 5
+                    Layout.fillWidth: true
+                    Layout.topMargin: 2
+                    Layout.bottomMargin: 2
+                    text: content
+                    wrapMode: Text.Wrap
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    color: Kirigami.Theme.negativeTextColor
                     textFormat: Text.PlainText
                 }
             }
