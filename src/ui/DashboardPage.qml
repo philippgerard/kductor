@@ -55,7 +55,7 @@ Kirigami.ScrollablePage {
                 repositoryPath: repoPath
                 branch: branchName
                 workspaceStatus: status
-                agentsRunning: AgentManager.workspaceAgentStatus(workspaceId) === 2
+                agentsRunning: AgentManager.activeCount >= 0 && AgentManager.workspaceAgentStatus(workspaceId) === 2
                 agents: AgentManager.agentsForWorkspace(workspaceId).length
 
                 onClicked: {
