@@ -78,7 +78,7 @@ QQC2.ScrollView {
                 spacing: 0
 
                 // Agent text — the primary content, with markdown
-                QQC2.Label {
+                TextEdit {
                     visible: lineType === 0
                     Layout.fillWidth: true
                     Layout.topMargin: Kirigami.Units.smallSpacing
@@ -86,6 +86,12 @@ QQC2.ScrollView {
                     text: content
                     wrapMode: Text.Wrap
                     textFormat: Text.MarkdownText
+                    readOnly: true
+                    selectByMouse: true
+                    color: Kirigami.Theme.textColor
+                    selectedTextColor: Kirigami.Theme.highlightedTextColor
+                    selectionColor: Kirigami.Theme.highlightColor
+                    font: Kirigami.Theme.defaultFont
                 }
 
                 // Thinking — collapsible
@@ -223,12 +229,19 @@ QQC2.ScrollView {
                         opacity: 0.5
                     }
 
-                    QQC2.Label {
+                    TextEdit {
                         Layout.fillWidth: true
                         text: content
                         wrapMode: Text.Wrap
                         font.bold: true
                         textFormat: Text.PlainText
+                        readOnly: true
+                        selectByMouse: true
+                        color: Kirigami.Theme.textColor
+                        selectedTextColor: Kirigami.Theme.highlightedTextColor
+                        selectionColor: Kirigami.Theme.highlightColor
+                        font.family: Kirigami.Theme.defaultFont.family
+                        font.pointSize: Kirigami.Theme.defaultFont.pointSize
                     }
                 }
 
