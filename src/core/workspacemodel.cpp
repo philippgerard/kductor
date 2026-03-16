@@ -124,6 +124,19 @@ void WorkspaceModel::updateStatus(const QString &id, int status)
     }
 }
 
+void WorkspaceModel::rename(const QString &id, const QString &newName)
+{
+    for (int i = 0; i < m_workspaces.size(); ++i) {
+        if (m_workspaces[i].id == id) {
+            m_workspaces[i].name = newName;
+            m_workspaces[i].updatedAt = QDateTime::currentDateTime();
+            m_store.updateWorkspace(m_workspaces[i]);
+            Q_EMIT dataChanged(index(i), index(i), {NameRole});
+            return;
+        }
+    }
+}
+
 QStringList WorkspaceModel::uniqueRepoPaths() const
 {
     QStringList result;
