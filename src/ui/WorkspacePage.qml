@@ -59,6 +59,34 @@ Kirigami.Page {
         onTriggered: WorktreeManager.checkPrStatus(worktreePath)
     }
 
+    // React to git operations performed by the agent (commit, push, PR, merge)
+    Connections {
+        target: AgentManager
+        function onGitEventDetected(wsId, eventType) {
+            if (wsId !== workspaceId) return;
+
+            if (eventType === "push" || eventType === "pr-created") {
+                // Agent pushed or created a PR — check status after a brief delay
+                // to let the remote operation settle
+                agentGitRefreshTimer.restart();
+            } else if (eventType === "pr-merged") {
+                WorktreeManager.checkPrStatus(worktreePath);
+            } else if (eventType === "commit") {
+                if (showingDiff) diffViewer.reload();
+            } else if (eventType === "merge") {
+                WorkspaceModel.updateStatus(workspaceId, 2);
+            }
+        }
+    }
+
+    // Debounce timer for agent-initiated push/PR — gives the remote a moment to settle
+    Timer {
+        id: agentGitRefreshTimer
+        interval: 2000
+        repeat: false
+        onTriggered: WorktreeManager.checkPrStatus(worktreePath)
+    }
+
     Component.onCompleted: {
         remoteAvailable = WorktreeManager.hasRemote(worktreePath);
         forge = WorktreeManager.detectForge(worktreePath);

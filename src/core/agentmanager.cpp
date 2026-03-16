@@ -201,6 +201,7 @@ void AgentManager::removeAgent(const QString &agentId)
         model->deleteLater();
     m_agentToWorkspace.remove(agentId);
     m_agentNames.remove(agentId);
+    m_pendingGitCommands.remove(agentId);
     QFile::remove(outputFilePath(agentId));
 
     saveAgents();
@@ -351,11 +352,23 @@ void AgentManager::connectAgent(const QString &agentId, AgentProcess *agent)
         QString summary = toolName + (detail.isEmpty() ? QString() : QStringLiteral(": ") + detail);
         if (model) model->appendToolUse(toolName, summary);
         Q_EMIT agentOutput(agentId, 2, summary, toolName);
+
+        // Track git-related Bash commands for event detection
+        if (toolName == QStringLiteral("Bash") && input.contains(QStringLiteral("command"))) {
+            QString cmd = input[QStringLiteral("command")].toString();
+            if (cmd.contains(QStringLiteral("git ")) || cmd.contains(QStringLiteral("gh ")))
+                m_pendingGitCommands[agentId] = cmd;
+        }
     });
 
     connect(agent, &AgentProcess::toolResult, this, [this, agentId, model](const QString &toolName, const QString &output) {
         if (model) model->appendToolResult(toolName, output);
         Q_EMIT agentOutput(agentId, 3, output, toolName);
+
+        // Detect completed git operations from the agent's Bash tool calls
+        QString pendingCmd = m_pendingGitCommands.take(agentId);
+        if (!pendingCmd.isEmpty())
+            detectGitEvent(agentId, pendingCmd);
     });
 
     connect(agent, &AgentProcess::errorOccurred, this, [this, agentId, model](const QString &error) {
@@ -369,7 +382,27 @@ void AgentManager::connectAgent(const QString &agentId, AgentProcess *agent)
     });
 
     connect(agent, &AgentProcess::processFinished, this, [this, agentId](int) {
+        m_pendingGitCommands.remove(agentId);
         Q_EMIT agentFinished(agentId);
         saveAgents(); // persist output after each run
     });
+}
+
+void AgentManager::detectGitEvent(const QString &agentId, const QString &command)
+{
+    QString wsId = m_agentToWorkspace.value(agentId);
+    if (wsId.isEmpty())
+        return;
+
+    // Order matters — check more specific patterns first
+    if (command.contains(QStringLiteral("gh pr create")))
+        Q_EMIT gitEventDetected(wsId, QStringLiteral("pr-created"));
+    else if (command.contains(QStringLiteral("gh pr merge")))
+        Q_EMIT gitEventDetected(wsId, QStringLiteral("pr-merged"));
+    else if (command.contains(QStringLiteral("git push")))
+        Q_EMIT gitEventDetected(wsId, QStringLiteral("push"));
+    else if (command.contains(QStringLiteral("git commit")))
+        Q_EMIT gitEventDetected(wsId, QStringLiteral("commit"));
+    else if (command.contains(QStringLiteral("git merge")))
+        Q_EMIT gitEventDetected(wsId, QStringLiteral("merge"));
 }

@@ -71,6 +71,7 @@ Q_SIGNALS:
     void agentCostChanged(const QString &agentId, double cost);
     void agentOutput(const QString &agentId, int lineType, const QString &content, const QString &toolName);
     void agentContextUpdated(const QString &agentId, int used, int window);
+    void gitEventDetected(const QString &workspaceId, const QString &eventType);
 
 private:
     QHash<QString, AgentProcess *> m_agents;
@@ -85,7 +86,10 @@ private:
     bool m_notifyOnComplete = true;
 
     void connectAgent(const QString &agentId, AgentProcess *agent);
+    void detectGitEvent(const QString &agentId, const QString &command);
     void detectClaude();
     void saveAgents();
     void loadAgents();
+
+    QHash<QString, QString> m_pendingGitCommands; // agentId -> last git-related Bash command
 };
