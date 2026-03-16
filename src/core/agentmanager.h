@@ -73,6 +73,8 @@ Q_SIGNALS:
     void agentContextUpdated(const QString &agentId, int used, int window);
     void gitEventDetected(const QString &workspaceId, const QString &eventType);
 
+    friend class AgentManagerTest;
+
 private:
     QHash<QString, AgentProcess *> m_agents;
     QHash<QString, AgentOutputModel *> m_outputModels;

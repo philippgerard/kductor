@@ -55,6 +55,12 @@ ecm_find_qmlmodule(org.kde.kirigamiaddons.formcard REQUIRED)
 
 add_subdirectory(src)
 
+include(ECMAddTests)
+if(BUILD_TESTING)
+    find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Test)
+    add_subdirectory(tests)
+endif()
+
 install(PROGRAMS org.kde.kductor.desktop DESTINATION ${KDE_INSTALL_APPDIR})
 install(FILES org.kde.kductor.metainfo.xml DESTINATION ${KDE_INSTALL_METAINFODIR})
 install(FILES org.kde.kductor.notifyrc DESTINATION ${KDE_INSTALL_KNOTIFYRCDIR})

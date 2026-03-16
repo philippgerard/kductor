@@ -68,6 +68,8 @@ private Q_SLOTS:
     void onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void onProcessError(QProcess::ProcessError error);
 
+    friend class AgentProcessTest;
+
 private:
     QProcess *m_process;
     QString m_agentId;

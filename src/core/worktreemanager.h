@@ -49,6 +49,8 @@ Q_SIGNALS:
     void prStatusChecked(const QString &url, int number, const QString &state,
                          const QString &mergeable, const QString &checks);
 
+    friend class WorktreeManagerTest;
+
 private:
     GitManager *m_gitManager;
     Workspace m_lastCreated;
