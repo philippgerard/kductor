@@ -39,6 +39,7 @@ public:
     Q_INVOKABLE QVariantMap getById(const QString &id) const;
     Q_INVOKABLE void remove(const QString &id);
     Q_INVOKABLE void updateStatus(const QString &id, int status);
+    Q_INVOKABLE void rename(const QString &id, const QString &newName);
     Q_INVOKABLE QStringList uniqueRepoPaths() const;
     Q_INVOKABLE QVariantList workspacesForRepo(const QString &repoPath) const;
     Q_INVOKABLE void addRepo(const QString &repoPath);

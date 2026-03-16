@@ -219,6 +219,24 @@ Kirigami.ApplicationWindow {
                                                         repoPath: modelData.repoPath
                                                     });
                                                 }
+
+                                                QQC2.Menu {
+                                                    id: wsContextMenu
+                                                    QQC2.MenuItem {
+                                                        text: i18n("Rename…")
+                                                        icon.name: "edit-rename"
+                                                        onTriggered: {
+                                                            renameDialog.workspaceId = modelData.id;
+                                                            renameDialog.currentName = modelData.name;
+                                                            renameDialog.open();
+                                                        }
+                                                    }
+                                                }
+
+                                                TapHandler {
+                                                    acceptedButtons: Qt.RightButton
+                                                    onTapped: wsContextMenu.popup()
+                                                }
                                             }
                                         }
                                     }
@@ -316,6 +334,42 @@ Kirigami.ApplicationWindow {
             let path = selectedFolder.toString().replace("file://", "");
             if (GitManager.openRepository(path)) {
                 WorkspaceModel.addRepo(path);
+            }
+        }
+    }
+
+    Kirigami.PromptDialog {
+        id: renameDialog
+
+        property string workspaceId: ""
+        property string currentName: ""
+
+        title: i18n("Rename Workspace")
+
+        onOpened: {
+            renameField.text = currentName;
+            renameField.selectAll();
+            renameField.forceActiveFocus();
+        }
+
+        Kirigami.ActionTextField {
+            id: renameField
+            placeholderText: i18n("Workspace name")
+            onAccepted: renameDialog.accept()
+        }
+
+        standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
+
+        onAccepted: {
+            let newName = renameField.text.trim();
+            if (newName.length > 0 && newName !== currentName) {
+                WorkspaceModel.rename(workspaceId, newName);
+                if (selectedWorkspaceId === workspaceId) {
+                    selectedWorkspaceName = newName;
+                    if (workspaceLoader.item) {
+                        workspaceLoader.item.workspaceName = newName;
+                    }
+                }
             }
         }
     }
