@@ -167,7 +167,7 @@ QQC2.ScrollView {
                             Item { Layout.fillWidth: true }
                         }
                         onClicked: {
-                            let groups = listView.expandedToolGroups;
+                            let groups = Object.assign({}, listView.expandedToolGroups);
                             groups[lineDelegate.index] = !groups[lineDelegate.index];
                             listView.expandedToolGroups = groups;
                         }
