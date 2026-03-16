@@ -249,7 +249,7 @@ Kirigami.Page {
                         if (prState === "OPEN" && prUrl.length > 0) {
                             Qt.openUrlExternally(prUrl);
                         } else {
-                            if (forge === "github") pushThenPR(); else pushThenOpenWeb();
+                            if (forge === "github") guardedOperation("pushPR"); else guardedOperation("pushWeb");
                         }
                     }
                 }
@@ -267,12 +267,12 @@ Kirigami.Page {
                             text: i18n("Merge PR (remote)")
                             icon.name: "vcs-merge"
                             visible: forge === "github"
-                            onTriggered: mergePrDialog.open()
+                            onTriggered: guardedOperation("mergePR")
                         }
                         QQC2.MenuItem {
                             text: i18n("Merge locally to %1", sourceBranch)
                             icon.name: "vcs-merge"
-                            onTriggered: mergeLocalDialog.open()
+                            onTriggered: guardedOperation("mergeLocal")
                         }
                         QQC2.MenuSeparator {}
                         QQC2.MenuItem {
@@ -367,6 +367,66 @@ Kirigami.Page {
         worktreePath: workspacePage.worktreePath
         sourceBranch: workspacePage.sourceBranch
         workspaceName: workspacePage.workspaceName
+    }
+
+    // --- Uncommitted changes guard ---
+
+    // Stores which operation to run after the user decides
+    property string pendingOperation: ""  // "pushWeb", "pushPR", "mergePR", "mergeLocal"
+
+    function guardedOperation(operation) {
+        if (GitManager.hasUncommittedChanges(worktreePath)) {
+            pendingOperation = operation;
+            uncommittedDialog.open();
+        } else {
+            executePendingOperation(operation);
+        }
+    }
+
+    function executePendingOperation(op) {
+        if (op === "pushWeb") pushThenOpenWeb();
+        else if (op === "pushPR") pushThenPR();
+        else if (op === "mergePR") mergePrDialog.open();
+        else if (op === "mergeLocal") mergeLocalDialog.open();
+    }
+
+    Kirigami.PromptDialog {
+        id: uncommittedDialog
+        title: i18n("Uncommitted Changes")
+        subtitle: i18n("This workspace has uncommitted changes that will not be included.")
+        standardButtons: Kirigami.Dialog.Cancel
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Commit && Continue")
+                icon.name: "vcs-commit"
+                onTriggered: {
+                    uncommittedDialog.close();
+                    let op = pendingOperation;
+                    function onCommitDone(finishedOp, result) {
+                        if (finishedOp !== "commit") return;
+                        WorktreeManager.operationSucceeded.disconnect(onCommitDone);
+                        WorktreeManager.operationFailed.disconnect(onCommitFail);
+                        executePendingOperation(op);
+                    }
+                    function onCommitFail(finishedOp, error) {
+                        if (finishedOp !== "commit") return;
+                        WorktreeManager.operationSucceeded.disconnect(onCommitDone);
+                        WorktreeManager.operationFailed.disconnect(onCommitFail);
+                    }
+                    WorktreeManager.operationSucceeded.connect(onCommitDone);
+                    WorktreeManager.operationFailed.connect(onCommitFail);
+                    WorktreeManager.commitAll(worktreePath);
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Continue Anyway")
+                icon.name: "dialog-warning-symbolic"
+                onTriggered: {
+                    uncommittedDialog.close();
+                    executePendingOperation(pendingOperation);
+                }
+            }
+        ]
     }
 
     // --- Dialogs ---

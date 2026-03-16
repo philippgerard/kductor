@@ -463,6 +463,28 @@ QVariantList GitManager::getDetailedDiff(const QString &worktreePath, const QStr
     return collector.files;
 }
 
+bool GitManager::hasUncommittedChanges(const QString &worktreePath) const
+{
+    git_repository *wtRepo = nullptr;
+    if (git_repository_open(&wtRepo, worktreePath.toUtf8().constData()) < 0)
+        return false;
+
+    git_status_options opts = GIT_STATUS_OPTIONS_INIT;
+    opts.show = GIT_STATUS_SHOW_INDEX_AND_WORKDIR;
+    opts.flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED | GIT_STATUS_OPT_RENAMES_HEAD_TO_INDEX;
+
+    git_status_list *statuses = nullptr;
+    if (git_status_list_new(&statuses, wtRepo, &opts) < 0) {
+        git_repository_free(wtRepo);
+        return false;
+    }
+
+    bool dirty = git_status_list_entrycount(statuses) > 0;
+    git_status_list_free(statuses);
+    git_repository_free(wtRepo);
+    return dirty;
+}
+
 void GitManager::setError(const QString &context)
 {
     const git_error *err = git_error_last();

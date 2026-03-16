@@ -23,6 +23,7 @@ public:
     Q_INVOKABLE QString worktreeBasePath() const;
 
     // Phase 4: PR & merge workflow
+    Q_INVOKABLE void commitAll(const QString &worktreePath);
     Q_INVOKABLE void pushBranch(const QString &worktreePath);
     Q_INVOKABLE void createPullRequest(const QString &worktreePath, const QString &title, const QString &body);
     Q_INVOKABLE void mergePullRequest(const QString &worktreePath);

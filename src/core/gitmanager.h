@@ -43,6 +43,8 @@ public:
     // mode: 0=all (source vs workdir), 1=committed (source vs HEAD), 2=pending (HEAD vs workdir)
     Q_INVOKABLE QVariantList getDetailedDiff(const QString &worktreePath, const QString &sourceBranch, int mode = 0) const;
 
+    Q_INVOKABLE bool hasUncommittedChanges(const QString &worktreePath) const;
+
     git_repository *repo() const { return m_repo.get(); }
     QString lastError() const { return m_lastError; }
 

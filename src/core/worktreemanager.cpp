@@ -133,6 +133,15 @@ void WorktreeManager::runAsync(const QString &operation, const QString &workDir,
 
 // --- Phase 4 operations ---
 
+void WorktreeManager::commitAll(const QString &worktreePath)
+{
+    QString script = QStringLiteral(
+        "git add -A && git commit -m 'Commit uncommitted changes'"
+    );
+    runAsync(QStringLiteral("commit"), worktreePath,
+             QStringLiteral("bash"), {QStringLiteral("-c"), script});
+}
+
 void WorktreeManager::pushBranch(const QString &worktreePath)
 {
     // Check if remote exists first
@@ -207,21 +216,9 @@ void WorktreeManager::mergePullRequest(const QString &worktreePath)
 
 void WorktreeManager::mergeToSource(const QString &repoPath, const QString &branchName, const QString &sourceBranch)
 {
-    // First: find and auto-commit any uncommitted changes in the worktree
-    // Then: in the main repo, checkout source branch and merge
-    // We need the worktree path to commit changes there first
-    // Find worktree path from branch name
+    // Merge branch into source in the main repo
+    // Uncommitted changes should already be handled by the UI guard dialog
     QString findWt = QStringLiteral(
-        "WT_PATH=$(git worktree list --porcelain | grep -B1 'branch refs/heads/%1' | head -1 | sed 's/worktree //')\n"
-        "if [ -n \"$WT_PATH\" ] && [ -d \"$WT_PATH\" ]; then\n"
-        "  cd \"$WT_PATH\"\n"
-        "  if ! git diff --quiet HEAD 2>/dev/null || ! git diff --cached --quiet HEAD 2>/dev/null; then\n"
-        "    git add -A\n"
-        "    git commit -m 'Auto-commit uncommitted changes before merge' --quiet\n"
-        "    echo 'Committed pending changes in worktree'\n"
-        "  fi\n"
-        "  cd '%2'\n"
-        "fi\n"
         "git stash --quiet 2>/dev/null || true\n"
         "git checkout '%3' 2>&1\n"
         "git merge '%1' --no-edit 2>&1\n"
