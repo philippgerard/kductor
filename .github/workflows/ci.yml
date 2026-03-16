@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:42
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          dnf install -y \
+            cmake extra-cmake-modules gcc-c++ pkgconf-pkg-config \
+            qt6-qtbase-devel qt6-qtdeclarative-devel \
+            kf6-kirigami-devel kf6-ki18n-devel kf6-kcoreaddons-devel \
+            kf6-kconfig-devel kf6-kdbusaddons-devel \
+            kf6-knotifications-devel kf6-kstatusnotifieritem-devel \
+            kf6-kcrash-devel kf6-kwindowsystem-devel kf6-kiconthemes-devel \
+            kf6-kirigami-addons-devel \
+            libgit2-devel
+
+      - name: Configure
+        run: cmake -B build -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+        env:
+          QT_QPA_PLATFORM: offscreen
