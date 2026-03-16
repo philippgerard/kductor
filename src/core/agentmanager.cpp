@@ -154,22 +154,24 @@ QString AgentManager::agentName(const QString &agentId) const
 }
 
 void AgentManager::startAgent(const QString &agentId, const QString &workingDir,
-                               const QString &prompt, const QString &model)
+                               const QString &prompt, const QString &model,
+                               const QStringList &imagePaths)
 {
     auto *agent = m_agents.value(agentId, nullptr);
     if (!agent || !canStartAgent())
         return;
-    agent->start(workingDir, prompt, model);
+    agent->start(workingDir, prompt, model, imagePaths);
     Q_EMIT activeCountChanged();
 }
 
 void AgentManager::sendPrompt(const QString &agentId, const QString &workingDir,
-                               const QString &prompt, const QString &model)
+                               const QString &prompt, const QString &model,
+                               const QStringList &imagePaths)
 {
     auto *agent = m_agents.value(agentId, nullptr);
     if (!agent)
         return;
-    agent->resume(workingDir, prompt, model);
+    agent->resume(workingDir, prompt, model, imagePaths);
     Q_EMIT activeCountChanged();
 }
 

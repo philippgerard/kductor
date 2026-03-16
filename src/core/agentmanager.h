@@ -22,9 +22,11 @@ public:
 
     Q_INVOKABLE QString createAgent(const QString &workspaceId, const QString &name = QString());
     Q_INVOKABLE void startAgent(const QString &agentId, const QString &workingDir,
-                                const QString &prompt, const QString &model = QStringLiteral("sonnet"));
+                                const QString &prompt, const QString &model = QStringLiteral("sonnet"),
+                                const QStringList &imagePaths = {});
     Q_INVOKABLE void sendPrompt(const QString &agentId, const QString &workingDir,
-                                const QString &prompt, const QString &model = QStringLiteral("sonnet"));
+                                const QString &prompt, const QString &model = QStringLiteral("sonnet"),
+                                const QStringList &imagePaths = {});
     Q_INVOKABLE void stopAgent(const QString &agentId);
     Q_INVOKABLE void stopAll();
     Q_INVOKABLE void removeAgent(const QString &agentId);

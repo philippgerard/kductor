@@ -39,9 +39,11 @@ public:
     int contextWindow() const { return m_contextWindow; }
 
     Q_INVOKABLE void start(const QString &workingDir, const QString &prompt,
-                           const QString &model = QStringLiteral("sonnet"));
+                           const QString &model = QStringLiteral("sonnet"),
+                           const QStringList &imagePaths = {});
     Q_INVOKABLE void resume(const QString &workingDir, const QString &prompt,
-                            const QString &model = QStringLiteral("sonnet"));
+                            const QString &model = QStringLiteral("sonnet"),
+                            const QStringList &imagePaths = {});
     Q_INVOKABLE void stop();
 
 Q_SIGNALS:
@@ -80,5 +82,7 @@ private:
     void setStatus(int status);
     void setActivity(const QString &activity);
     void parseLine(const QByteArray &line);
-    QStringList buildArgs(const QString &prompt, const QString &model, bool isResume) const;
+    QStringList buildArgs(const QString &prompt, const QString &model, bool isResume,
+                          const QStringList &imagePaths = {}) const;
+    static QString buildPromptWithImages(const QString &prompt, const QStringList &imagePaths);
 };

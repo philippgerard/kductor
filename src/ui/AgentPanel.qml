@@ -18,6 +18,13 @@ ColumnLayout {
 
     signal closeRequested(string agentId)
 
+    readonly property var imageExtensions: ["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"]
+
+    function isImageFile(path) {
+        let ext = path.split('.').pop().toLowerCase();
+        return imageExtensions.indexOf(ext) !== -1;
+    }
+
     Connections {
         target: AgentManager
 
@@ -33,6 +40,85 @@ ColumnLayout {
             if (id === agentPanel.agentId) {
                 agentPanel.contextUsed = used;
                 agentPanel.contextWindow = window;
+            }
+        }
+    }
+
+    // Drop overlay — covers entire panel
+    DropArea {
+        id: dropArea
+        anchors.fill: parent
+        z: 1
+        keys: ["text/uri-list"]
+
+        onEntered: function(drag) {
+            if (drag.hasUrls) {
+                let hasImage = false;
+                for (let i = 0; i < drag.urls.length; i++) {
+                    let url = drag.urls[i].toString();
+                    if (url.startsWith("file://") && agentPanel.isImageFile(url)) {
+                        hasImage = true;
+                        break;
+                    }
+                }
+                if (hasImage) {
+                    drag.accepted = true;
+                    dropOverlay.visible = true;
+                } else {
+                    drag.accepted = false;
+                }
+            }
+        }
+
+        onExited: {
+            dropOverlay.visible = false;
+        }
+
+        onDropped: function(drop) {
+            dropOverlay.visible = false;
+            if (drop.hasUrls) {
+                for (let i = 0; i < drop.urls.length; i++) {
+                    let url = drop.urls[i].toString();
+                    if (url.startsWith("file://") && agentPanel.isImageFile(url)) {
+                        let path = url.replace("file://", "");
+                        path = decodeURIComponent(path);
+                        commandBar.addImage(path);
+                    }
+                }
+                commandBar.focusInput();
+            }
+        }
+    }
+
+    // Visual drop feedback
+    Rectangle {
+        id: dropOverlay
+        anchors.fill: parent
+        z: 2
+        visible: false
+        color: Qt.rgba(Kirigami.Theme.highlightColor.r,
+                       Kirigami.Theme.highlightColor.g,
+                       Kirigami.Theme.highlightColor.b, 0.15)
+        border.color: Kirigami.Theme.highlightColor
+        border.width: 2
+        radius: Kirigami.Units.cornerRadius
+
+        ColumnLayout {
+            anchors.centerIn: parent
+            spacing: Kirigami.Units.largeSpacing
+
+            Kirigami.Icon {
+                Layout.alignment: Qt.AlignHCenter
+                source: "image-x-generic-symbolic"
+                width: Kirigami.Units.iconSizes.huge
+                height: width
+                color: Kirigami.Theme.highlightColor
+            }
+            QQC2.Label {
+                Layout.alignment: Qt.AlignHCenter
+                text: i18n("Drop screenshots here")
+                font.bold: true
+                color: Kirigami.Theme.highlightColor
             }
         }
     }
@@ -140,12 +226,13 @@ ColumnLayout {
 
     // Command bar
     CommandBar {
+        id: commandBar
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.largeSpacing
         Layout.rightMargin: Kirigami.Units.largeSpacing
         Layout.topMargin: Kirigami.Units.smallSpacing
         Layout.bottomMargin: Kirigami.Units.smallSpacing
-        onPromptSubmitted: function(prompt) {
+        onPromptSubmitted: function(prompt, imagePaths) {
             if (!AgentManager.claudeAvailable) {
                 if (agentPanel.outputModel)
                     agentPanel.outputModel.appendError(i18n("Claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code"));
@@ -156,12 +243,21 @@ ColumnLayout {
                     agentPanel.outputModel.appendError(i18n("Max concurrent agents reached (%1). Stop an agent first.", AgentManager.maxConcurrentAgents));
                 return;
             }
+
+            // Build display text
+            let displayText = prompt;
+            if (imagePaths.length > 0) {
+                let names = imagePaths.map(function(p) { return p.split('/').pop(); });
+                let prefix = "📎 " + names.join(", ");
+                displayText = prompt.length > 0 ? prefix + "\n" + prompt : prefix;
+            }
             if (agentPanel.outputModel)
-                agentPanel.outputModel.appendSystem(prompt);
+                agentPanel.outputModel.appendSystem(displayText);
+
             if (agentPanel.agentStatus === 0) {
-                AgentManager.startAgent(agentPanel.agentId, agentPanel.workingDir, prompt, modelPicker.currentValue);
+                AgentManager.startAgent(agentPanel.agentId, agentPanel.workingDir, prompt, modelPicker.currentValue, imagePaths);
             } else {
-                AgentManager.sendPrompt(agentPanel.agentId, agentPanel.workingDir, prompt, modelPicker.currentValue);
+                AgentManager.sendPrompt(agentPanel.agentId, agentPanel.workingDir, prompt, modelPicker.currentValue, imagePaths);
             }
         }
     }

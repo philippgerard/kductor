@@ -53,7 +53,24 @@ AgentProcess::~AgentProcess()
     stop();
 }
 
-QStringList AgentProcess::buildArgs(const QString &prompt, const QString &model, bool isResume) const
+QString AgentProcess::buildPromptWithImages(const QString &prompt, const QStringList &imagePaths)
+{
+    if (imagePaths.isEmpty())
+        return prompt;
+
+    QString combined;
+    combined += QStringLiteral("[The user has attached screenshots. Use the Read tool to view each one before responding:\n");
+    for (const auto &path : imagePaths) {
+        combined += QStringLiteral("- ") + path + QStringLiteral("\n");
+    }
+    combined += QStringLiteral("]\n\n");
+    if (!prompt.isEmpty())
+        combined += prompt;
+    return combined;
+}
+
+QStringList AgentProcess::buildArgs(const QString &prompt, const QString &model, bool isResume,
+                                    const QStringList &imagePaths) const
 {
     QStringList args;
 
@@ -61,7 +78,7 @@ QStringList AgentProcess::buildArgs(const QString &prompt, const QString &model,
         args << QStringLiteral("--continue");
     }
 
-    args << QStringLiteral("-p") << prompt;
+    args << QStringLiteral("-p") << buildPromptWithImages(prompt, imagePaths);
     args << QStringLiteral("--output-format") << QStringLiteral("stream-json");
     args << QStringLiteral("--verbose");
     args << QStringLiteral("--model") << model;
@@ -70,7 +87,8 @@ QStringList AgentProcess::buildArgs(const QString &prompt, const QString &model,
     return args;
 }
 
-void AgentProcess::start(const QString &workingDir, const QString &prompt, const QString &model)
+void AgentProcess::start(const QString &workingDir, const QString &prompt,
+                         const QString &model, const QStringList &imagePaths)
 {
     if (m_status == Running || m_status == Starting)
         return;
@@ -79,7 +97,7 @@ void AgentProcess::start(const QString &workingDir, const QString &prompt, const
     m_buffer.clear();
 
     QString program = findClaude();
-    QStringList args = buildArgs(prompt, model, false);
+    QStringList args = buildArgs(prompt, model, false, imagePaths);
 
     m_process->setWorkingDirectory(workingDir);
     m_process->setProgram(program);
@@ -89,12 +107,13 @@ void AgentProcess::start(const QString &workingDir, const QString &prompt, const
     m_process->closeWriteChannel();
 }
 
-void AgentProcess::resume(const QString &workingDir, const QString &prompt, const QString &model)
+void AgentProcess::resume(const QString &workingDir, const QString &prompt,
+                          const QString &model, const QStringList &imagePaths)
 {
     if (m_status == Running || m_status == Starting)
         return;
     if (m_sessionId.isEmpty()) {
-        start(workingDir, prompt, model);
+        start(workingDir, prompt, model, imagePaths);
         return;
     }
 
@@ -103,7 +122,7 @@ void AgentProcess::resume(const QString &workingDir, const QString &prompt, cons
 
     m_process->setWorkingDirectory(workingDir);
     m_process->setProgram(findClaude());
-    m_process->setArguments(buildArgs(prompt, model, true));
+    m_process->setArguments(buildArgs(prompt, model, true, imagePaths));
     m_process->start();
     m_process->closeWriteChannel();
 }
