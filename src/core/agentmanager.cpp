@@ -8,8 +8,11 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
+
+#include <utility>
 
 AgentManager::AgentManager(QObject *parent)
     : QObject(parent)
@@ -20,6 +23,8 @@ AgentManager::AgentManager(QObject *parent)
     m_defaultModel = settings.value(QStringLiteral("defaultModel"), QStringLiteral("opus")).toString();
     m_showInTray = settings.value(QStringLiteral("showInTray"), true).toBool();
     m_notifyOnComplete = settings.value(QStringLiteral("notifyOnComplete"), true).toBool();
+    m_permissionMode = settings.value(QStringLiteral("permissionMode"), QStringLiteral("bypass")).toString();
+    m_extraFlags = settings.value(QStringLiteral("extraFlags")).toString();
 
     detectClaude();
     loadAgents();
@@ -28,6 +33,9 @@ AgentManager::AgentManager(QObject *parent)
 
 void AgentManager::detectClaude()
 {
+    m_claudePath.clear();
+    m_claudeAvailable = false;
+
     QStringList candidates = {
         QDir::homePath() + QStringLiteral("/.local/bin/claude"),
         QDir::homePath() + QStringLiteral("/.npm/bin/claude"),
@@ -48,11 +56,42 @@ void AgentManager::detectClaude()
     }
 }
 
+bool AgentManager::redetectClaude()
+{
+    bool wasAvailable = m_claudeAvailable;
+    QString oldPath = m_claudePath;
+    detectClaude();
+    if (m_claudeAvailable != wasAvailable || m_claudePath != oldPath)
+        Q_EMIT claudeAvailableChanged();
+    return m_claudeAvailable;
+}
+
 static QString dataDir()
 {
     QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QDir().mkpath(dir);
+    // Agent transcripts and metadata can contain sensitive content; keep the
+    // directory owner-only.
+    QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
     return dir;
+}
+
+// Atomic, owner-only write. Returns false (and warns) on failure without
+// clobbering the previous file contents.
+static bool writeFileAtomic(const QString &path, const QByteArray &data)
+{
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+        qWarning("kductor: cannot write %s: %s", qUtf8Printable(path), qUtf8Printable(file.errorString()));
+        return false;
+    }
+    file.write(data);
+    if (!file.commit()) {
+        qWarning("kductor: failed to commit %s: %s", qUtf8Printable(path), qUtf8Printable(file.errorString()));
+        return false;
+    }
+    QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    return true;
 }
 
 static QString agentsFilePath()
@@ -67,27 +106,36 @@ static QString outputFilePath(const QString &agentId)
     return dir + QStringLiteral("/") + agentId + QStringLiteral(".json");
 }
 
-void AgentManager::saveAgents()
+void AgentManager::saveAgentsMetadata()
 {
     QJsonArray arr;
-    for (auto it = m_agentToWorkspace.cbegin(); it != m_agentToWorkspace.cend(); ++it) {
+    for (const QString &agentId : m_agentOrder) {
+        if (!m_agentToWorkspace.contains(agentId))
+            continue;
         QJsonObject obj;
-        obj[QStringLiteral("id")] = it.key();
-        obj[QStringLiteral("workspaceId")] = it.value();
-        obj[QStringLiteral("name")] = m_agentNames.value(it.key());
+        obj[QStringLiteral("id")] = agentId;
+        obj[QStringLiteral("workspaceId")] = m_agentToWorkspace.value(agentId);
+        obj[QStringLiteral("name")] = m_agentNames.value(agentId);
+        if (auto *agent = m_agents.value(agentId))
+            obj[QStringLiteral("sessionId")] = agent->sessionId();
         arr.append(obj);
-
-        // Save output model
-        auto *model = m_outputModels.value(it.key());
-        if (model && model->count() > 0) {
-            QFile outFile(outputFilePath(it.key()));
-            if (outFile.open(QIODevice::WriteOnly))
-                outFile.write(QJsonDocument(model->toJson()).toJson(QJsonDocument::Compact));
-        }
     }
-    QFile file(agentsFilePath());
-    if (file.open(QIODevice::WriteOnly))
-        file.write(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+    writeFileAtomic(agentsFilePath(), QJsonDocument(arr).toJson(QJsonDocument::Compact));
+}
+
+void AgentManager::saveAgentOutput(const QString &agentId)
+{
+    auto *model = m_outputModels.value(agentId);
+    if (model && model->count() > 0)
+        writeFileAtomic(outputFilePath(agentId),
+                        QJsonDocument(model->toJson()).toJson(QJsonDocument::Compact));
+}
+
+void AgentManager::saveAgents()
+{
+    saveAgentsMetadata();
+    for (const QString &agentId : m_agentOrder)
+        saveAgentOutput(agentId);
 }
 
 void AgentManager::loadAgents()
@@ -109,6 +157,12 @@ void AgentManager::loadAgents()
         auto *agent = new AgentProcess(this);
         auto *model = new AgentOutputModel(this);
 
+        // Restore the session id so a follow-up prompt continues the same
+        // conversation the user sees in the transcript, not a fresh one.
+        agent->setSessionId(obj[QStringLiteral("sessionId")].toString());
+        agent->setPermissionMode(m_permissionMode);
+        agent->setExtraFlags(m_extraFlags);
+
         // Restore output history
         QFile outFile(outputFilePath(agentId));
         if (outFile.open(QIODevice::ReadOnly)) {
@@ -120,6 +174,7 @@ void AgentManager::loadAgents()
         m_outputModels.insert(agentId, model);
         m_agentToWorkspace.insert(agentId, workspaceId);
         m_agentNames.insert(agentId, name);
+        m_agentOrder.append(agentId);
         connectAgent(agentId, agent);
     }
 }
@@ -130,13 +185,17 @@ QString AgentManager::createAgent(const QString &workspaceId, const QString &nam
     auto *model = new AgentOutputModel(this);
     QString agentId = agent->agentId();
 
+    agent->setPermissionMode(m_permissionMode);
+    agent->setExtraFlags(m_extraFlags);
+
     m_agents.insert(agentId, agent);
     m_outputModels.insert(agentId, model);
     m_agentToWorkspace.insert(agentId, workspaceId);
     m_agentNames.insert(agentId, name);
+    m_agentOrder.append(agentId);
     connectAgent(agentId, agent);
 
-    saveAgents();
+    saveAgentsMetadata();
 
     Q_EMIT agentSpawned(agentId, workspaceId);
     Q_EMIT activeCountChanged();
@@ -153,26 +212,30 @@ QString AgentManager::agentName(const QString &agentId) const
     return m_agentNames.value(agentId);
 }
 
-void AgentManager::startAgent(const QString &agentId, const QString &workingDir,
+bool AgentManager::startAgent(const QString &agentId, const QString &workingDir,
                                const QString &prompt, const QString &model,
                                const QStringList &imagePaths)
 {
     auto *agent = m_agents.value(agentId, nullptr);
     if (!agent || !canStartAgent())
-        return;
-    agent->start(workingDir, prompt, model, imagePaths);
-    Q_EMIT activeCountChanged();
+        return false;
+    bool launched = agent->start(workingDir, prompt, model, imagePaths);
+    if (launched)
+        Q_EMIT activeCountChanged();
+    return launched;
 }
 
-void AgentManager::sendPrompt(const QString &agentId, const QString &workingDir,
+bool AgentManager::sendPrompt(const QString &agentId, const QString &workingDir,
                                const QString &prompt, const QString &model,
                                const QStringList &imagePaths)
 {
     auto *agent = m_agents.value(agentId, nullptr);
     if (!agent)
-        return;
-    agent->resume(workingDir, prompt, model, imagePaths);
-    Q_EMIT activeCountChanged();
+        return false;
+    bool launched = agent->resume(workingDir, prompt, model, imagePaths);
+    if (launched)
+        Q_EMIT activeCountChanged();
+    return launched;
 }
 
 void AgentManager::stopAgent(const QString &agentId)
@@ -201,19 +264,22 @@ void AgentManager::removeAgent(const QString &agentId)
         model->deleteLater();
     m_agentToWorkspace.remove(agentId);
     m_agentNames.remove(agentId);
+    m_agentOrder.removeAll(agentId);
     m_pendingGitCommands.remove(agentId);
     QFile::remove(outputFilePath(agentId));
 
-    saveAgents();
+    saveAgentsMetadata();
     Q_EMIT activeCountChanged();
 }
 
 QStringList AgentManager::agentsForWorkspace(const QString &workspaceId) const
 {
+    // Iterate the stable order list so tabs keep a deterministic sequence across
+    // restarts (a raw QHash iteration order is unspecified).
     QStringList result;
-    for (auto it = m_agentToWorkspace.cbegin(); it != m_agentToWorkspace.cend(); ++it) {
-        if (it.value() == workspaceId)
-            result.append(it.key());
+    for (const QString &agentId : m_agentOrder) {
+        if (m_agentToWorkspace.value(agentId) == workspaceId)
+            result.append(agentId);
     }
     return result;
 }
@@ -228,6 +294,18 @@ QString AgentManager::agentActivity(const QString &agentId) const
 {
     auto *agent = m_agents.value(agentId, nullptr);
     return agent ? agent->currentActivity() : QString();
+}
+
+QString AgentManager::agentSessionId(const QString &agentId) const
+{
+    auto *agent = m_agents.value(agentId, nullptr);
+    return agent ? agent->sessionId() : QString();
+}
+
+double AgentManager::agentCost(const QString &agentId) const
+{
+    auto *agent = m_agents.value(agentId, nullptr);
+    return agent ? agent->totalCost() : 0.0;
 }
 
 bool AgentManager::canStartAgent() const
@@ -286,6 +364,29 @@ void AgentManager::setNotifyOnComplete(bool notify)
         m_notifyOnComplete = notify;
         QSettings().setValue(QStringLiteral("notifyOnComplete"), notify);
         Q_EMIT notifyOnCompleteChanged();
+    }
+}
+
+void AgentManager::setPermissionMode(const QString &mode)
+{
+    if (m_permissionMode != mode) {
+        m_permissionMode = mode;
+        QSettings().setValue(QStringLiteral("permissionMode"), mode);
+        // Apply to existing agents so the next prompt uses the new mode.
+        for (auto *agent : std::as_const(m_agents))
+            agent->setPermissionMode(mode);
+        Q_EMIT permissionModeChanged();
+    }
+}
+
+void AgentManager::setExtraFlags(const QString &flags)
+{
+    if (m_extraFlags != flags) {
+        m_extraFlags = flags;
+        QSettings().setValue(QStringLiteral("extraFlags"), flags);
+        for (auto *agent : std::as_const(m_agents))
+            agent->setExtraFlags(flags);
+        Q_EMIT extraFlagsChanged();
     }
 }
 
@@ -384,7 +485,10 @@ void AgentManager::connectAgent(const QString &agentId, AgentProcess *agent)
     connect(agent, &AgentProcess::processFinished, this, [this, agentId](int) {
         m_pendingGitCommands.remove(agentId);
         Q_EMIT agentFinished(agentId);
-        saveAgents(); // persist output after each run
+        // Persist the new session id and only this agent's transcript — not every
+        // agent's full output — after each run.
+        saveAgentsMetadata();
+        saveAgentOutput(agentId);
     });
 }
 

@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QProcessEnvironment>
 #include <QStandardPaths>
+#include <QTimer>
 
 static QString findClaude()
 {
@@ -74,27 +75,46 @@ QStringList AgentProcess::buildArgs(const QString &prompt, const QString &model,
 {
     QStringList args;
 
-    if (isResume) {
-        args << QStringLiteral("--continue");
+    // Resume this agent's own session by id, not the most recent conversation in
+    // the working directory (which may belong to a different agent in the same
+    // worktree).
+    if (isResume && !m_sessionId.isEmpty()) {
+        args << QStringLiteral("--resume") << m_sessionId;
     }
 
     args << QStringLiteral("-p") << buildPromptWithImages(prompt, imagePaths);
     args << QStringLiteral("--output-format") << QStringLiteral("stream-json");
     args << QStringLiteral("--verbose");
     args << QStringLiteral("--model") << model;
-    args << QStringLiteral("--dangerously-skip-permissions");
+
+    // Permission handling is an explicit, user-visible choice (see Settings).
+    // "bypass" keeps the fully-autonomous behaviour; the other modes hand control
+    // to the CLI's permission system.
+    if (m_permissionMode == QStringLiteral("bypass") || m_permissionMode.isEmpty()) {
+        args << QStringLiteral("--dangerously-skip-permissions");
+    } else {
+        args << QStringLiteral("--permission-mode") << m_permissionMode;
+    }
+
+    // User-supplied extra flags, parsed with shell-style quoting.
+    if (!m_extraFlags.trimmed().isEmpty())
+        args << QProcess::splitCommand(m_extraFlags);
 
     return args;
 }
 
-void AgentProcess::start(const QString &workingDir, const QString &prompt,
+bool AgentProcess::start(const QString &workingDir, const QString &prompt,
                          const QString &model, const QStringList &imagePaths)
 {
-    if (m_status == Running || m_status == Starting)
-        return;
+    if (m_status == Running || m_status == Starting
+        || m_process->state() != QProcess::NotRunning)
+        return false;
 
     setStatus(Starting);
     m_buffer.clear();
+    m_stderrBuffer.clear();
+    m_toolUseNames.clear();
+    m_stopRequested = false;
 
     QString program = findClaude();
     QStringList args = buildArgs(prompt, model, false, imagePaths);
@@ -105,45 +125,53 @@ void AgentProcess::start(const QString &workingDir, const QString &prompt,
 
     m_process->start();
     m_process->closeWriteChannel();
+    return true;
 }
 
-void AgentProcess::resume(const QString &workingDir, const QString &prompt,
+bool AgentProcess::resume(const QString &workingDir, const QString &prompt,
                           const QString &model, const QStringList &imagePaths)
 {
-    if (m_status == Running || m_status == Starting)
-        return;
+    if (m_status == Running || m_status == Starting
+        || m_process->state() != QProcess::NotRunning)
+        return false;
     if (m_sessionId.isEmpty()) {
-        start(workingDir, prompt, model, imagePaths);
-        return;
+        return start(workingDir, prompt, model, imagePaths);
     }
 
     setStatus(Starting);
     m_buffer.clear();
+    m_stderrBuffer.clear();
+    m_toolUseNames.clear();
+    m_stopRequested = false;
 
     m_process->setWorkingDirectory(workingDir);
     m_process->setProgram(findClaude());
     m_process->setArguments(buildArgs(prompt, model, true, imagePaths));
     m_process->start();
     m_process->closeWriteChannel();
+    return true;
 }
 
 void AgentProcess::onReadyReadStderr()
 {
-    QByteArray data = m_process->readAllStandardError();
-    if (!data.isEmpty()) {
-        Q_EMIT errorOccurred(QString::fromUtf8(data.trimmed()));
-    }
+    // Accumulate stderr; emit it once on a failed exit rather than per chunk,
+    // which would produce spurious "Agent Error" notifications mid-run.
+    m_stderrBuffer.append(m_process->readAllStandardError());
 }
 
 void AgentProcess::stop()
 {
     if (m_process->state() != QProcess::NotRunning) {
+        m_stopRequested = true;
         m_process->terminate();
-        if (!m_process->waitForFinished(3000)) {
-            m_process->kill();
-        }
+        // Escalate to kill after a grace period, without blocking the GUI thread.
+        QTimer::singleShot(3000, this, [this]() {
+            if (m_process->state() != QProcess::NotRunning)
+                m_process->kill();
+        });
+    } else {
+        setStatus(Idle);
     }
-    setStatus(Idle);
 }
 
 void AgentProcess::onReadyRead()
@@ -208,13 +236,23 @@ void AgentProcess::parseLine(const QByteArray &line)
                 Q_EMIT thinkingText(b[QStringLiteral("thinking")].toString());
             } else if (blockType == QStringLiteral("tool_use")) {
                 QString toolName = b[QStringLiteral("name")].toString();
+                m_toolUseNames.insert(b[QStringLiteral("id")].toString(), toolName);
                 setActivity(QStringLiteral("Using %1").arg(toolName));
                 Q_EMIT toolUse(toolName, b[QStringLiteral("input")].toObject());
-            } else if (blockType == QStringLiteral("tool_result")) {
-                Q_EMIT toolResult(
-                    b[QStringLiteral("name")].toString(),
-                    b[QStringLiteral("content")].toString()
-                );
+            }
+        }
+    } else if (type == QStringLiteral("user")) {
+        // Tool results arrive in user-type messages; their content is a string or
+        // an array of content blocks, and they reference the originating tool_use
+        // by id rather than carrying the tool name.
+        QJsonObject message = obj[QStringLiteral("message")].toObject();
+        const QJsonArray content = message[QStringLiteral("content")].toArray();
+        for (const auto &block : content) {
+            QJsonObject b = block.toObject();
+            if (b[QStringLiteral("type")].toString() == QStringLiteral("tool_result")) {
+                QString toolUseId = b[QStringLiteral("tool_use_id")].toString();
+                QString toolName = m_toolUseNames.value(toolUseId);
+                Q_EMIT toolResult(toolName, extractToolResultText(b[QStringLiteral("content")]));
             }
         }
     } else if (type == QStringLiteral("result")) {
@@ -244,21 +282,60 @@ void AgentProcess::parseLine(const QByteArray &line)
     }
 }
 
+QString AgentProcess::extractToolResultText(const QJsonValue &content)
+{
+    if (content.isString())
+        return content.toString();
+    if (content.isArray()) {
+        QStringList parts;
+        const QJsonArray arr = content.toArray();
+        for (const auto &v : arr) {
+            QJsonObject o = v.toObject();
+            if (o[QStringLiteral("type")].toString() == QStringLiteral("text"))
+                parts << o[QStringLiteral("text")].toString();
+        }
+        return parts.join(QStringLiteral("\n"));
+    }
+    return {};
+}
+
 void AgentProcess::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
+    // A user-requested stop is a normal stop, not a crash or error.
+    if (m_stopRequested) {
+        m_stopRequested = false;
+        m_stderrBuffer.clear();
+        setStatus(Idle);
+        setActivity(QStringLiteral("Stopped"));
+        Q_EMIT processFinished(exitCode);
+        return;
+    }
+
     if (exitStatus == QProcess::CrashExit) {
         setStatus(Error);
         setActivity(QStringLiteral("Crashed"));
-        Q_EMIT errorOccurred(QStringLiteral("Agent process crashed"));
+        const QString detail = QString::fromUtf8(m_stderrBuffer.trimmed());
+        Q_EMIT errorOccurred(detail.isEmpty() ? QStringLiteral("Agent process crashed") : detail);
     } else if (m_status != Completed) {
         setStatus(exitCode == 0 ? Completed : Error);
         setActivity(exitCode == 0 ? QStringLiteral("Completed") : QStringLiteral("Error"));
+        if (exitCode != 0) {
+            const QString detail = QString::fromUtf8(m_stderrBuffer.trimmed());
+            Q_EMIT errorOccurred(detail.isEmpty()
+                ? QStringLiteral("Agent exited with code %1").arg(exitCode) : detail);
+        }
     }
+    m_stderrBuffer.clear();
     Q_EMIT processFinished(exitCode);
 }
 
 void AgentProcess::onProcessError(QProcess::ProcessError error)
 {
+    // terminate()/kill() during a user-requested stop surfaces as Crashed here;
+    // that is expected, so let onProcessFinished handle it as a normal stop.
+    if (m_stopRequested)
+        return;
+
     setStatus(Error);
     QString msg;
     switch (error) {

@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QSaveFile>
 #include <QStandardPaths>
 
 Workspace Workspace::create(const QString &name, const QString &repoPath,
@@ -97,9 +98,12 @@ void WorkspaceStore::saveAll(const QList<Workspace> &workspaces)
     for (const auto &ws : workspaces)
         arr.append(ws.toJson());
 
-    QFile file(storagePath());
+    // Atomic write so a crash mid-save cannot corrupt the workspace list.
+    QSaveFile file(storagePath());
     if (file.open(QIODevice::WriteOnly)) {
         file.write(QJsonDocument(arr).toJson());
+        if (!file.commit())
+            qWarning("kductor: failed to save workspaces: %s", qUtf8Printable(file.errorString()));
     }
 }
 

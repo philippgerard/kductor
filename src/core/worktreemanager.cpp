@@ -122,7 +122,10 @@ void WorktreeManager::runAsync(const QString &operation, const QString &workDir,
     });
 
     connect(proc, &QProcess::errorOccurred, this, [this, proc, operation](QProcess::ProcessError err) {
-        Q_UNUSED(err)
+        // Only handle the start failure here; crashes and other errors also emit
+        // finished(), which already reports the failure — avoid a double signal.
+        if (err != QProcess::FailedToStart)
+            return;
         Q_EMIT operationFailed(operation, proc->errorString());
         proc->deleteLater();
     });
@@ -133,13 +136,18 @@ void WorktreeManager::runAsync(const QString &operation, const QString &workDir,
 
 // --- Phase 4 operations ---
 
-void WorktreeManager::commitAll(const QString &worktreePath)
+void WorktreeManager::commitAll(const QString &worktreePath, const QString &message)
 {
-    QString script = QStringLiteral(
-        "git add -A && git commit -m 'Commit uncommitted changes'"
-    );
+    QString msg = message.trimmed();
+    if (msg.isEmpty())
+        msg = QStringLiteral("Commit uncommitted changes");
+
+    // The message is passed as a positional argument ($1) so it can never be
+    // interpreted as shell syntax, no matter what the user types.
+    QString script = QStringLiteral("git add -A && git commit -m \"$1\"");
     runAsync(QStringLiteral("commit"), worktreePath,
-             QStringLiteral("bash"), {QStringLiteral("-c"), script});
+             QStringLiteral("bash"),
+             {QStringLiteral("-c"), script, QStringLiteral("kductor"), msg});
 }
 
 void WorktreeManager::pushBranch(const QString &worktreePath)
@@ -181,7 +189,7 @@ void WorktreeManager::createPullRequest(const QString &worktreePath, const QStri
     QString script = QStringLiteral(
         "set -e\n"
         "BASE=$(git merge-base HEAD $(git rev-parse --abbrev-ref HEAD@{upstream} 2>/dev/null || echo main) 2>/dev/null || git rev-list --max-parents=0 HEAD)\n"
-        "CONTEXT=\"Commits:\\n$(git log $BASE..HEAD --format='- %%s' --reverse)\\n\\nDiff stat:\\n$(git diff $BASE --stat)\\n\\nSample changes:\\n$(git diff $BASE --no-color | head -200)\"\n"
+        "CONTEXT=\"Commits:\\n$(git log $BASE..HEAD --format='- %s' --reverse)\\n\\nDiff stat:\\n$(git diff $BASE --stat)\\n\\nSample changes:\\n$(git diff $BASE --no-color | head -200)\"\n"
         "\n"
         "PROMPT=\"Based on these git changes, write a pull request title and markdown body. "
         "Format your response exactly as:\\nTITLE: <concise title under 72 chars>\\nBODY:\\n<markdown body with a summary section and key changes>\"\n"
@@ -193,10 +201,10 @@ void WorktreeManager::createPullRequest(const QString &worktreePath, const QStri
         "\n"
         "# Fallback if Claude didn't respond properly\n"
         "if [ -z \"$PR_TITLE\" ]; then\n"
-        "  PR_TITLE=$(git log -1 --format='%%s')\n"
+        "  PR_TITLE=$(git log -1 --format='%s')\n"
         "fi\n"
         "if [ -z \"$PR_BODY\" ]; then\n"
-        "  PR_BODY=$(git log $BASE..HEAD --format='- %%s' --reverse)\n"
+        "  PR_BODY=$(git log $BASE..HEAD --format='- %s' --reverse)\n"
         "fi\n"
         "\n"
         "gh pr create --title \"$PR_TITLE\" --body \"$PR_BODY\"\n"
@@ -216,29 +224,53 @@ void WorktreeManager::mergePullRequest(const QString &worktreePath)
 
 void WorktreeManager::mergeToSource(const QString &repoPath, const QString &branchName, const QString &sourceBranch)
 {
-    // Merge branch into source in the main repo
-    // Uncommitted changes should already be handled by the UI guard dialog
-    QString findWt = QStringLiteral(
+    // Merge the workspace branch into the source branch in the main repo.
+    // Branch names are passed as positional arguments ($1 = source, $2 = branch)
+    // so they can never be interpreted as shell syntax (a malicious ref name in
+    // an untrusted repo would otherwise be command injection). The merge exit
+    // code is captured and propagated so a conflict surfaces as a failed
+    // operation instead of a false "Merged" success.
+    // Uncommitted changes in the main repo are stashed and restored around it.
+    QString script = QStringLiteral(
         "git stash --quiet 2>/dev/null || true\n"
-        "git checkout '%3' 2>&1\n"
-        "git merge '%1' --no-edit 2>&1\n"
+        "if ! git checkout \"$1\" 2>&1; then\n"
+        "  git stash pop --quiet 2>/dev/null || true\n"
+        "  exit 1\n"
+        "fi\n"
+        "git merge \"$2\" --no-edit 2>&1\n"
+        "RC=$?\n"
         "git stash pop --quiet 2>/dev/null || true\n"
-    ).arg(branchName, repoPath, sourceBranch);
+        "exit $RC\n"
+    );
     runAsync(QStringLiteral("merge"), repoPath,
              QStringLiteral("bash"),
-             {QStringLiteral("-c"), findWt});
+             {QStringLiteral("-c"), script, QStringLiteral("kductor"),
+              sourceBranch, branchName});
 }
 
 void WorktreeManager::archiveWorkspace(const QString &worktreePath, const QString &repoPath,
                                        const QString &deleteBranch)
 {
-    QDir(worktreePath).removeRecursively();
+    // Guard the recursive delete: refuse anything that is not inside our managed
+    // worktree base directory. An empty or relative path would otherwise resolve
+    // to (and wipe) the current working directory.
+    const QString cleaned = QDir::cleanPath(QFileInfo(worktreePath).absoluteFilePath());
+    const QString base = QDir::cleanPath(worktreeBasePath());
+    if (worktreePath.isEmpty() || !cleaned.startsWith(base + QLatin1Char('/'))) {
+        Q_EMIT operationFailed(QStringLiteral("archive"),
+            QStringLiteral("Refusing to archive: '%1' is not inside the managed worktree directory.")
+                .arg(worktreePath));
+        return;
+    }
+
+    QDir(cleaned).removeRecursively();
 
     if (!deleteBranch.isEmpty()) {
-        // Prune worktree then delete branch
-        QString script = QStringLiteral("git worktree prune && git branch -D '%1' 2>&1").arg(deleteBranch);
+        // Prune worktree then delete branch ($1, passed as a positional argument).
+        QString script = QStringLiteral("git worktree prune && git branch -D \"$1\" 2>&1");
         runAsync(QStringLiteral("archive"), repoPath,
-                 QStringLiteral("bash"), {QStringLiteral("-c"), script});
+                 QStringLiteral("bash"),
+                 {QStringLiteral("-c"), script, QStringLiteral("kductor"), deleteBranch});
     } else {
         runAsync(QStringLiteral("archive"), repoPath,
                  QStringLiteral("git"),
@@ -253,6 +285,15 @@ void WorktreeManager::checkPrStatus(const QString &worktreePath)
     proc->setProgram(QStringLiteral("gh"));
     proc->setArguments({QStringLiteral("pr"), QStringLiteral("view"),
                         QStringLiteral("--json"), QStringLiteral("url,number,state,mergeable,statusCheckRollup")});
+
+    // If gh is missing or fails to launch, report "no PR" once and clean up the
+    // process instead of leaking it every poll interval.
+    connect(proc, &QProcess::errorOccurred, this, [this, proc](QProcess::ProcessError err) {
+        if (err != QProcess::FailedToStart)
+            return; // finished() handles crashes and other errors
+        Q_EMIT prStatusChecked(QString(), 0, QStringLiteral("none"), QString(), QString());
+        proc->deleteLater();
+    });
 
     connect(proc, &QProcess::finished, this, [this, proc](int exitCode, QProcess::ExitStatus) {
         QString output = QString::fromUtf8(proc->readAllStandardOutput()).trimmed();
@@ -299,11 +340,13 @@ void WorktreeManager::checkPrStatus(const QString &worktreePath)
 
 void WorktreeManager::pullSource(const QString &repoPath, const QString &sourceBranch)
 {
+    // Branch name passed as a positional argument ($1) to avoid shell injection.
     QString script = QStringLiteral(
-        "git fetch origin '%1' 2>&1 && git checkout '%1' 2>&1 && git pull --ff-only 2>&1"
-    ).arg(sourceBranch);
+        "git fetch origin \"$1\" 2>&1 && git checkout \"$1\" 2>&1 && git pull --ff-only 2>&1"
+    );
     runAsync(QStringLiteral("pull"), repoPath,
-             QStringLiteral("bash"), {QStringLiteral("-c"), script});
+             QStringLiteral("bash"),
+             {QStringLiteral("-c"), script, QStringLiteral("kductor"), sourceBranch});
 }
 
 bool WorktreeManager::hasRemote(const QString &worktreePath) const

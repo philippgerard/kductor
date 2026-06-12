@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QSaveFile>
 #include <QStandardPaths>
 
 WorkspaceModel::WorkspaceModel(WorktreeManager *worktreeManager, QObject *parent)
@@ -132,6 +133,7 @@ void WorkspaceModel::rename(const QString &id, const QString &newName)
             m_workspaces[i].updatedAt = QDateTime::currentDateTime();
             m_store.updateWorkspace(m_workspaces[i]);
             Q_EMIT dataChanged(index(i), index(i), {NameRole});
+            Q_EMIT countChanged(); // re-triggers the sidebar's workspace snapshots
             return;
         }
     }
@@ -175,9 +177,12 @@ void WorkspaceModel::saveRepos()
     QJsonArray arr;
     for (const auto &r : m_standaloneRepos)
         arr.append(r);
-    QFile file(reposFilePath());
-    if (file.open(QIODevice::WriteOnly))
+    QSaveFile file(reposFilePath());
+    if (file.open(QIODevice::WriteOnly)) {
         file.write(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+        if (!file.commit())
+            qWarning("kductor: failed to save repos: %s", qUtf8Printable(file.errorString()));
+    }
 }
 
 void WorkspaceModel::addRepo(const QString &repoPath)

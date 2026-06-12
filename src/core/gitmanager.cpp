@@ -307,6 +307,7 @@ static int diffFileCb(const git_diff_delta *delta, float, void *payload)
     case GIT_DELTA_MODIFIED:   statusLabel = QStringLiteral("Modified"); break;
     case GIT_DELTA_RENAMED:    statusLabel = QStringLiteral("Renamed"); break;
     case GIT_DELTA_COPIED:     statusLabel = QStringLiteral("Copied"); break;
+    case GIT_DELTA_UNTRACKED:  statusLabel = QStringLiteral("Added"); break;
     default:                   statusLabel = QStringLiteral("Changed"); break;
     }
 
@@ -378,14 +379,33 @@ QVariantList GitManager::getDetailedDiff(const QString &worktreePath, const QStr
 
     git_diff *diff = nullptr;
     git_diff_options opts = GIT_DIFF_OPTIONS_INIT;
-    opts.flags = GIT_DIFF_INCLUDE_UNTRACKED;
+    // Show full content for untracked files (agent-created files are usually
+    // untracked) and recurse into untracked directories so new files render
+    // real addition hunks instead of an empty body.
+    opts.flags = GIT_DIFF_INCLUDE_UNTRACKED
+               | GIT_DIFF_SHOW_UNTRACKED_CONTENT
+               | GIT_DIFF_RECURSE_UNTRACKED_DIRS;
     opts.context_lines = 3;
 
     int err = -1;
 
     if (mode == 2) {
-        // Pending: HEAD vs working directory (uncommitted changes only)
-        err = git_diff_index_to_workdir(&diff, wtRepo, nullptr, &opts);
+        // Pending: HEAD tree vs working directory (incl. index), so both staged
+        // and unstaged uncommitted changes are shown. Fall back to the index for
+        // an unborn HEAD (no commits yet).
+        git_reference *headRef = nullptr;
+        git_commit *headCommit = nullptr;
+        git_tree *headTree = nullptr;
+        if (git_repository_head(&headRef, wtRepo) == 0
+            && git_commit_lookup(&headCommit, wtRepo, git_reference_target(headRef)) == 0
+            && git_commit_tree(&headTree, headCommit) == 0) {
+            err = git_diff_tree_to_workdir_with_index(&diff, wtRepo, headTree, &opts);
+        } else {
+            err = git_diff_tree_to_workdir_with_index(&diff, wtRepo, nullptr, &opts);
+        }
+        if (headTree) git_tree_free(headTree);
+        if (headCommit) git_commit_free(headCommit);
+        if (headRef) git_reference_free(headRef);
     } else {
         // Resolve source branch tree for modes 0 and 1
         git_object *sourceObj = nullptr;

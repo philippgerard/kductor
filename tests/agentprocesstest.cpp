@@ -37,6 +37,17 @@ private:
         return obj;
     }
 
+    QJsonObject makeUser(const QJsonArray &content)
+    {
+        QJsonObject message;
+        message[QStringLiteral("content")] = content;
+
+        QJsonObject obj;
+        obj[QStringLiteral("type")] = QStringLiteral("user");
+        obj[QStringLiteral("message")] = message;
+        return obj;
+    }
+
     QJsonObject makeTextBlock(const QString &text)
     {
         QJsonObject b;
@@ -53,20 +64,24 @@ private:
         return b;
     }
 
-    QJsonObject makeToolUseBlock(const QString &name, const QJsonObject &input)
+    QJsonObject makeToolUseBlock(const QString &name, const QJsonObject &input,
+                                 const QString &id = QString())
     {
         QJsonObject b;
         b[QStringLiteral("type")] = QStringLiteral("tool_use");
         b[QStringLiteral("name")] = name;
         b[QStringLiteral("input")] = input;
+        if (!id.isEmpty())
+            b[QStringLiteral("id")] = id;
         return b;
     }
 
-    QJsonObject makeToolResultBlock(const QString &name, const QString &content)
+    // Tool results arrive in user-type messages and reference the tool_use by id.
+    QJsonObject makeToolResultBlock(const QString &toolUseId, const QString &content)
     {
         QJsonObject b;
         b[QStringLiteral("type")] = QStringLiteral("tool_result");
-        b[QStringLiteral("name")] = name;
+        b[QStringLiteral("tool_use_id")] = toolUseId;
         b[QStringLiteral("content")] = content;
         return b;
     }
@@ -157,18 +172,46 @@ private Q_SLOTS:
         QCOMPARE(ap.currentActivity(), QStringLiteral("Using Bash"));
     }
 
-    void testParseAssistantToolResult()
+    void testParseToolResult()
     {
         AgentProcess ap;
         QSignalSpy resultSpy(&ap, &AgentProcess::toolResult);
 
-        QJsonArray content;
-        content.append(makeToolResultBlock(QStringLiteral("Read"), QStringLiteral("file contents here")));
-        feed(ap, makeAssistant(content));
+        // Tool name is correlated from the originating tool_use block...
+        QJsonObject input;
+        input[QStringLiteral("file_path")] = QStringLiteral("/tmp/x");
+        QJsonArray useContent;
+        useContent.append(makeToolUseBlock(QStringLiteral("Read"), input, QStringLiteral("tu-1")));
+        feed(ap, makeAssistant(useContent));
+
+        // ...and the result arrives later in a user-type message.
+        QJsonArray resultContent;
+        resultContent.append(makeToolResultBlock(QStringLiteral("tu-1"), QStringLiteral("file contents here")));
+        feed(ap, makeUser(resultContent));
 
         QCOMPARE(resultSpy.count(), 1);
         QCOMPARE(resultSpy[0][0].toString(), QStringLiteral("Read"));
         QCOMPARE(resultSpy[0][1].toString(), QStringLiteral("file contents here"));
+    }
+
+    void testParseToolResultArrayContent()
+    {
+        AgentProcess ap;
+        QSignalSpy resultSpy(&ap, &AgentProcess::toolResult);
+
+        // tool_result content may also be an array of {type:text,text} blocks.
+        QJsonObject textBlock;
+        textBlock[QStringLiteral("type")] = QStringLiteral("text");
+        textBlock[QStringLiteral("text")] = QStringLiteral("array form");
+        QJsonObject result;
+        result[QStringLiteral("type")] = QStringLiteral("tool_result");
+        result[QStringLiteral("tool_use_id")] = QStringLiteral("tu-2");
+        result[QStringLiteral("content")] = QJsonArray{textBlock};
+
+        feed(ap, makeUser(QJsonArray{result}));
+
+        QCOMPARE(resultSpy.count(), 1);
+        QCOMPARE(resultSpy[0][1].toString(), QStringLiteral("array form"));
     }
 
     void testParseContextCompaction()
@@ -311,12 +354,33 @@ private Q_SLOTS:
     void testBuildArgsResume()
     {
         AgentProcess ap;
+        ap.setSessionId(QStringLiteral("sess-xyz"));
         QStringList args = ap.buildArgs(QStringLiteral("continue"), QStringLiteral("sonnet"), true);
 
-        QVERIFY(args.contains(QStringLiteral("--continue")));
+        // Resume targets this agent's own session, not the most recent one in cwd.
+        QVERIFY(args.contains(QStringLiteral("--resume")));
+        QVERIFY(args.contains(QStringLiteral("sess-xyz")));
+        QVERIFY(!args.contains(QStringLiteral("--continue")));
         QVERIFY(args.contains(QStringLiteral("-p")));
         QVERIFY(args.contains(QStringLiteral("--model")));
         QVERIFY(args.contains(QStringLiteral("sonnet")));
+    }
+
+    void testBuildArgsPermissionMode()
+    {
+        AgentProcess ap;
+        // Default keeps the fully-autonomous bypass flag.
+        QStringList bypass = ap.buildArgs(QStringLiteral("x"), QStringLiteral("opus"), false);
+        QVERIFY(bypass.contains(QStringLiteral("--dangerously-skip-permissions")));
+        QVERIFY(!bypass.contains(QStringLiteral("--permission-mode")));
+
+        // A non-bypass mode hands control to the CLI's permission system.
+        ap.setPermissionMode(QStringLiteral("acceptEdits"));
+        QStringList safe = ap.buildArgs(QStringLiteral("x"), QStringLiteral("opus"), false);
+        QVERIFY(!safe.contains(QStringLiteral("--dangerously-skip-permissions")));
+        int i = safe.indexOf(QStringLiteral("--permission-mode"));
+        QVERIFY(i >= 0);
+        QCOMPARE(safe[i + 1], QStringLiteral("acceptEdits"));
     }
 
     void testBuildArgsWithImages()
