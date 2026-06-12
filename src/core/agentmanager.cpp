@@ -8,7 +8,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QRegularExpression>
 #include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
@@ -16,13 +15,14 @@
 #include <utility>
 
 // Neutralize Markdown image embeds in untrusted agent text so rich-text
-// rendering can't auto-fetch remote images (tracking / SSRF). The alt text is
-// preserved; the URL is dropped.
+// rendering can't auto-fetch remote images (tracking / SSRF). Demoting the
+// image marker "![" to a plain link marker "[" turns every image into a
+// (non-fetching) link while preserving the visible text. This is robust against
+// brackets in the alt text and parentheses in the URL, which a regex is not.
 static QString sanitizeAgentMarkdown(const QString &text)
 {
-    static const QRegularExpression imgRe(QStringLiteral("!\\[([^\\]]*)\\]\\([^)]*\\)"));
     QString out = text;
-    out.replace(imgRe, QStringLiteral("[\\1]"));
+    out.replace(QStringLiteral("!["), QStringLiteral("["));
     return out;
 }
 

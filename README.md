@@ -13,15 +13,18 @@ Inspired by [Conductor](https://www.conductor.build) for macOS.
 
 **Agent orchestration**
 - Spawn multiple Claude Code agents per workspace, each working in an isolated git worktree
-- Stream agent output in real-time with markdown rendering
-- Collapsible thinking blocks and grouped tool actions
-- Per-agent model selection (Opus, Sonnet, Haiku)
-- Multi-turn conversations with `--continue` session support
-- Agent sessions and output persist across app restarts
+- Stream agent output in real-time with markdown rendering (with selectable text)
+- Collapsible thinking blocks, grouped tool actions, and inspectable tool results
+- Per-agent model selection (Fable 5, Opus, Sonnet, Haiku)
+- Multi-line prompt input with prompt history (↑/↓) and per-session cost display
+- Multi-turn conversations resumed by session id, persisted across app restarts
+- Configurable permission mode (full access ↔ ask/plan) and extra CLI flags
+- Stop a running agent; prompts are never silently dropped while one is busy
 
 **Diff & code review**
-- Built-in diff viewer powered by libgit2
-- Three modes: All changes, Committed only, Pending (uncommitted)
+- Built-in diff viewer powered by libgit2, computed off the UI thread
+- Three modes: All changes, Committed only, Pending (staged + unstaged)
+- New (untracked) files render full content; theme-aware, selectable, copyable
 - Color-coded unified diff with line numbers and hunk headers
 - Toggle between agent view and diff view with Ctrl+D
 
@@ -37,16 +40,19 @@ Inspired by [Conductor](https://www.conductor.build) for macOS.
 - Forge auto-detection (GitHub, Gitea, GitLab)
 
 **KDE integration**
-- System tray with live agent count and window toggle
-- KDE notifications on agent completion and errors
-- Settings page (default model, max agents, tray, notifications)
-- Native Kirigami UI with Breeze theme
+- System tray with live agent count and window toggle; "Continue in Background"
+- KDE notifications on completion (with workspace context and click-to-focus)
+- Settings page (default model, permission mode, extra flags, max agents, tray, notifications, CLI recheck)
+- Native Kirigami UI with Breeze theme, full keyboard accessibility, and dark-mode-correct colors
+- Window geometry and sidebar width persist across restarts
 
 **Workspace management**
-- Sidebar with repos and nested workspaces (Conductor-style)
+- Sidebar with repos and nested workspaces (Conductor-style), resizable
 - Repo overview page with stats
-- Add repos without creating workspaces
+- Add repos without creating workspaces (with clear errors for non-Git folders)
 - Per-repo workspace creation with branch selection
+- Commit with a message, open the worktree folder, copy branch/path/PR URL
+- Keyboard shortcuts: Ctrl+T new agent, Ctrl+PgUp/PgDn switch agents, Ctrl+D diff
 
 ## Requirements
 
@@ -101,7 +107,7 @@ src/
 │   ├── DiffViewerPage.qml    # Diff viewer with mode switcher
 │   ├── RepoOverviewPage.qml  # Repo stats and workspace list
 │   ├── SettingsPage.qml      # FormCard settings
-│   └── components/           # StatusBadge, StreamingTextArea, CommandBar
+│   └── components/           # StatusBadge, StreamingTextArea, CommandBar, CopyButton
 └── main.cpp                  # Entry point, tray, notifications
 ```
 

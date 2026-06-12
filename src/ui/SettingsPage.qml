@@ -38,6 +38,7 @@ FormCard.FormCardPage {
             valueRole: "value"
             model: [
                 { label: i18n("Full access — skip all permission prompts"), value: "bypass" },
+                { label: i18n("Auto mode — approve actions automatically"), value: "auto" },
                 { label: i18n("Auto-accept file edits"), value: "acceptEdits" },
                 { label: i18n("Ask each time (default)"), value: "default" },
                 { label: i18n("Plan mode (read-only)"), value: "plan" }

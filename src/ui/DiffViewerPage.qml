@@ -139,7 +139,9 @@ Item {
                     return items;
                 }
                 currentIndex: selectedFileIndex
-                onCurrentIndexChanged: selectedFileIndex = currentIndex
+                // Only react to user selection; a model reset bouncing
+                // currentIndex to 0 must not write back over selectedFileIndex.
+                onActivated: selectedFileIndex = currentIndex
             }
 
             CopyButton {

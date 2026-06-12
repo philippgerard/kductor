@@ -34,21 +34,27 @@ QQC2.ScrollView {
                 Qt.callLater(function() { listView.positionViewAtEnd(); });
         }
 
-        // Keyboard scrolling for accessibility.
+        // Keyboard scrolling for accessibility. Key events don't trigger
+        // onMovementEnded, so update autoScroll explicitly here, otherwise the
+        // next streamed line would yank the view back to the bottom.
         Keys.onPressed: function(event) {
             const page = listView.height * 0.9;
             if (event.key === Qt.Key_PageDown) {
                 listView.contentY = Math.min(listView.contentY + page,
                     listView.contentHeight - listView.height + listView.bottomMargin);
+                listView.autoScroll = listView.atYEnd;
                 event.accepted = true;
             } else if (event.key === Qt.Key_PageUp) {
                 listView.contentY = Math.max(listView.contentY - page, -listView.topMargin);
+                listView.autoScroll = false;
                 event.accepted = true;
             } else if (event.key === Qt.Key_End) {
                 listView.positionViewAtEnd();
+                listView.autoScroll = true;
                 event.accepted = true;
             } else if (event.key === Qt.Key_Home) {
                 listView.positionViewAtBeginning();
+                listView.autoScroll = false;
                 event.accepted = true;
             }
         }

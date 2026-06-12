@@ -39,6 +39,17 @@
     <internet>always</internet>
   </requires>
   <releases>
+    <release version="0.3.0" date="2026-06-12">
+      <description>
+        <p>A major hardening and usability release.</p>
+        <ul>
+          <li>Security: fixed shell command injection via branch names; agent permission mode is now an explicit, visible setting; transcripts are stored owner-only; untrusted agent output can no longer trigger remote resource fetches.</li>
+          <li>Correctness: agents resume their own session by id; tool results and agent git events are detected again; conflicted merges are reported as failures; diffs show staged changes and new-file content; persistence is atomic.</li>
+          <li>UX: multi-line prompt with history, off-thread diffs with loading states, operation progress, commit messages, cost display, and a workspace actions menu.</li>
+          <li>Accessibility: keyboard navigation, accessible names, theme-correct colors, and reduced-motion support throughout.</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-06-12">
       <description>
         <p>Default model setting is now honored when starting agents, new model options, random city names prefilled for new workspaces, main window restore from tray, and an automated test suite with CI.</p>

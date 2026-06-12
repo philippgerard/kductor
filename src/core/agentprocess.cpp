@@ -163,10 +163,13 @@ void AgentProcess::stop()
 {
     if (m_process->state() != QProcess::NotRunning) {
         m_stopRequested = true;
+        const qint64 pid = m_process->processId();
         m_process->terminate();
         // Escalate to kill after a grace period, without blocking the GUI thread.
-        QTimer::singleShot(3000, this, [this]() {
-            if (m_process->state() != QProcess::NotRunning)
+        // Guard on the PID so a process that exited and was replaced by a new
+        // run (stop-then-resend) is not killed by this stale timer.
+        QTimer::singleShot(3000, this, [this, pid]() {
+            if (m_process->state() != QProcess::NotRunning && m_process->processId() == pid)
                 m_process->kill();
         });
     } else {
