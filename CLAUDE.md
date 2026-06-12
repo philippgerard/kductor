@@ -30,6 +30,7 @@ Kill previous instances first if needed: `pkill -f "bin/kductor"`
 - `AgentManager` — multi-agent pool, settings persistence, output model ownership
 - `AgentOutputModel` — QAbstractListModel with ring buffer for streaming output
 - `WorkspaceModel` — workspace list model with JSON persistence
+- `Workspace` / `WorkspaceStore` — workspace value type and JSON load/save backend
 
 ## QML structure
 
@@ -38,7 +39,13 @@ Kill previous instances first if needed: `pkill -f "bin/kductor"`
 - `AgentPanel.qml` — streaming output, command bar, model picker, context usage
 - `DiffViewerPage.qml` — libgit2 diff with All/Committed/Pending modes
 - `RepoOverviewPage.qml` — repo stats and workspace list
-- `StreamingTextArea.qml` — output renderer with collapsible thinking/actions
+- `SettingsPage.qml` — FormCard settings (default model, permission mode, etc.)
+- `AboutPage.qml` — standard Kirigami about page
+- `WorkspaceCreateSheet.qml` — new-workspace dialog with branch picker and name generator
+- `components/StreamingTextArea.qml` — output renderer with collapsible thinking/actions
+- `components/CommandBar.qml` — prompt input with history and image attachments
+- `components/StatusBadge.qml` — colored status indicator for workspaces/agents
+- `components/CopyButton.qml` — copy-to-clipboard tool button
 
 ## Dependencies
 
@@ -46,7 +53,14 @@ Qt 6.6+, KDE Frameworks 6 (Kirigami, I18n, CoreAddons, Config, DBusAddons, Notif
 
 ## Testing
 
-Requires `claude` CLI installed (`~/.local/bin/claude` or in PATH).
+Unit tests (QtTest, one per core class) live in `tests/`:
+
+```bash
+cmake --build build/
+ctest --test-dir build/ --output-on-failure
+```
+
+Manual testing requires the `claude` CLI installed (`~/.local/bin/claude` or in PATH).
 
 ## Code style
 
