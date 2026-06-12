@@ -15,6 +15,7 @@
 #include <KIconTheme>
 #include <KNotification>
 #include <KStatusNotifierItem>
+#include <KWindowSystem>
 
 #include "kductor-version.h"
 #include "core/gitmanager.h"
@@ -153,6 +154,15 @@ int main(int argc, char *argv[])
                 rootWindow->raise();
                 rootWindow->requestActivate();
             }
+        });
+
+        // Restore the window when a second instance is launched while we run in the tray
+        QObject::connect(&service, &KDBusService::activateRequested, rootWindow,
+                         [rootWindow](const QStringList &, const QString &) {
+            KWindowSystem::updateStartupId(rootWindow);
+            rootWindow->show();
+            rootWindow->raise();
+            KWindowSystem::activateWindow(rootWindow);
         });
     }
 
