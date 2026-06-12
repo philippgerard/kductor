@@ -25,7 +25,7 @@ jobs:
             kf6-knotifications-devel kf6-kstatusnotifieritem-devel \
             kf6-kcrash-devel kf6-kwindowsystem-devel kf6-kiconthemes-devel \
             kf6-kirigami-addons-devel \
-            libgit2-devel
+            libgit2-devel git
 
       - name: Configure
         run: cmake -B build -DBUILD_TESTING=ON
