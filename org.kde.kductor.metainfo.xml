@@ -39,6 +39,11 @@
     <internet>always</internet>
   </requires>
   <releases>
+    <release version="0.2.0" date="2026-06-12">
+      <description>
+        <p>Default model setting is now honored when starting agents, new model options, random city names prefilled for new workspaces, main window restore from tray, and an automated test suite with CI.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-03-15">
       <description>
         <p>Initial release with full agent orchestration, diff viewer, PR workflow, and KDE integration.</p>
