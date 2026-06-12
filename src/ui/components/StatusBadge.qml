@@ -10,13 +10,23 @@ RowLayout {
     property int status: 0
     property string context: "workspace" // "workspace" or "agent"
 
-    readonly property var colors: [
-        Kirigami.Theme.positiveTextColor,   // 0
-        Kirigami.Theme.neutralTextColor,    // 1
-        Kirigami.Theme.focusColor,          // 2
-        Kirigami.Theme.disabledTextColor,   // 3
-        Kirigami.Theme.negativeTextColor    // 4
+    readonly property var workspaceColors: [
+        Kirigami.Theme.positiveTextColor,   // 0 Active
+        Kirigami.Theme.neutralTextColor,    // 1 Paused
+        Kirigami.Theme.focusColor,          // 2 Completed
+        Kirigami.Theme.disabledTextColor,   // 3 Archived
+        Kirigami.Theme.negativeTextColor    // 4 Error
     ]
+
+    readonly property var agentColors: [
+        Kirigami.Theme.disabledTextColor,   // 0 Idle
+        Kirigami.Theme.neutralTextColor,    // 1 Starting
+        Kirigami.Theme.focusColor,          // 2 Running
+        Kirigami.Theme.positiveTextColor,   // 3 Completed
+        Kirigami.Theme.negativeTextColor    // 4 Error
+    ]
+
+    readonly property var activeColors: context === "agent" ? agentColors : workspaceColors
 
     readonly property var workspaceLabels: [
         i18n("Active"),
@@ -41,19 +51,21 @@ RowLayout {
         width: Kirigami.Units.smallSpacing * 2
         height: width
         radius: width / 2
-        color: colors[Math.min(status, colors.length - 1)]
+        color: activeColors[Math.min(status, activeColors.length - 1)]
 
         SequentialAnimation on opacity {
-            running: pulsing
+            // Kirigami collapses durations to 1 when animations are disabled
+            // (reduced motion); skip the pulse in that case.
+            running: pulsing && Kirigami.Units.longDuration > 1
             loops: Animation.Infinite
-            NumberAnimation { to: 0.3; duration: 800; easing.type: Easing.InOutQuad }
-            NumberAnimation { to: 1.0; duration: 800; easing.type: Easing.InOutQuad }
+            NumberAnimation { to: 0.3; duration: Kirigami.Units.longDuration * 4; easing.type: Easing.InOutQuad }
+            NumberAnimation { to: 1.0; duration: Kirigami.Units.longDuration * 4; easing.type: Easing.InOutQuad }
         }
     }
 
     QQC2.Label {
         text: labels[Math.min(status, labels.length - 1)]
         font.pointSize: Kirigami.Theme.smallFont.pointSize
-        color: colors[Math.min(status, colors.length - 1)]
+        color: Kirigami.Theme.textColor
     }
 }

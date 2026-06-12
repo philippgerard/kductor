@@ -22,6 +22,7 @@
 #include "core/worktreemanager.h"
 #include "core/workspacemodel.h"
 #include "core/agentmanager.h"
+#include "core/agentprocess.h"
 #include "core/agentoutputmodel.h"
 
 int main(int argc, char *argv[])
@@ -71,9 +72,17 @@ int main(int argc, char *argv[])
     tray->setToolTipIconByPixmap(appIcon);
     tray->setCategory(KStatusNotifierItem::ApplicationStatus);
     tray->setStandardActionsEnabled(true);
-    tray->setStatus(KStatusNotifierItem::Active);
     tray->setToolTipTitle(i18n("Kductor"));
     tray->setToolTipSubTitle(i18n("No agents running"));
+
+    // Honor the "Show in system tray" setting (Passive hides the icon from the
+    // visible tray; NeedsAttention is applied separately on errors).
+    auto applyTrayStatus = [=]() {
+        tray->setStatus(agentManager->showInTray() ? KStatusNotifierItem::Active
+                                                   : KStatusNotifierItem::Passive);
+    };
+    applyTrayStatus();
+    QObject::connect(agentManager, &AgentManager::showInTrayChanged, tray, applyTrayStatus);
 
     // Context menu actions
     auto *stopAllAction = new QAction(QIcon::fromTheme(QStringLiteral("media-playback-stop-symbolic")),
@@ -86,12 +95,11 @@ int main(int argc, char *argv[])
     QObject::connect(agentManager, &AgentManager::activeCountChanged, tray, [=]() {
         int count = agentManager->activeCount();
         stopAllAction->setEnabled(count > 0);
+        applyTrayStatus();
         if (count > 0) {
-            tray->setStatus(KStatusNotifierItem::Active);
             tray->setToolTipSubTitle(i18np("%1 agent running", "%1 agents running", count));
             stopAllAction->setText(i18np("Stop %1 Agent", "Stop All %1 Agents", count));
         } else {
-            tray->setStatus(KStatusNotifierItem::Active);
             tray->setToolTipSubTitle(i18n("No agents running"));
             stopAllAction->setText(i18n("Stop All Agents"));
         }
@@ -100,31 +108,6 @@ int main(int argc, char *argv[])
     // Flash tray on agent error
     QObject::connect(agentManager, &AgentManager::agentError, tray, [=](const QString &, const QString &) {
         tray->setStatus(KStatusNotifierItem::NeedsAttention);
-    });
-
-    // --- Notifications ---
-    QObject::connect(agentManager, &AgentManager::agentFinished, &app, [=](const QString &agentId) {
-        if (!agentManager->notifyOnComplete())
-            return;
-        QString name = agentManager->agentName(agentId);
-        if (name.isEmpty())
-            name = i18n("Agent");
-        auto *notif = new KNotification(QStringLiteral("agentCompleted"));
-        notif->setTitle(i18n("Agent Completed"));
-        notif->setText(i18n("%1 has finished.", name));
-        notif->setIconName(QStringLiteral("kductor"));
-        notif->sendEvent();
-    });
-
-    QObject::connect(agentManager, &AgentManager::agentError, &app, [=](const QString &agentId, const QString &error) {
-        QString name = agentManager->agentName(agentId);
-        if (name.isEmpty())
-            name = i18n("Agent");
-        auto *notif = new KNotification(QStringLiteral("agentError"));
-        notif->setTitle(i18n("Agent Error"));
-        notif->setText(i18n("%1: %2", name, error));
-        notif->setIconName(QStringLiteral("kductor"));
-        notif->sendEvent();
     });
 
     // --- QML engine ---
@@ -145,6 +128,55 @@ int main(int argc, char *argv[])
 
     // Connect tray left-click to toggle the QML window
     auto *rootWindow = qobject_cast<QWindow *>(engine.rootObjects().first());
+
+    auto raiseWindow = [rootWindow]() {
+        if (!rootWindow)
+            return;
+        rootWindow->show();
+        rootWindow->raise();
+        rootWindow->requestActivate();
+    };
+
+    // --- Notifications ---
+    QObject::connect(agentManager, &AgentManager::agentFinished, &app,
+                     [=](const QString &agentId) {
+        if (!agentManager->notifyOnComplete())
+            return;
+        // Only notify on a genuine completion — not a user-stop (Idle) or error.
+        if (agentManager->agentStatus(agentId) != AgentProcess::Completed)
+            return;
+        QString name = agentManager->agentName(agentId);
+        if (name.isEmpty())
+            name = i18n("Agent");
+        const QString wsId = agentManager->workspaceForAgent(agentId);
+        const QString wsName = workspaceModel->getById(wsId).value(QStringLiteral("name")).toString();
+        // Don't interrupt if the user is already looking at the app.
+        if (rootWindow && rootWindow->isActive())
+            return;
+        auto *notif = new KNotification(QStringLiteral("agentCompleted"));
+        notif->setTitle(i18n("Agent Completed"));
+        notif->setText(wsName.isEmpty() ? i18n("%1 has finished.", name)
+                                        : i18n("%1 in %2 has finished.", name, wsName));
+        notif->setIconName(QStringLiteral("kductor"));
+        auto *openAction = notif->addDefaultAction(i18n("Open Kductor"));
+        QObject::connect(openAction, &KNotificationAction::activated, qApp, raiseWindow);
+        notif->sendEvent();
+    });
+
+    QObject::connect(agentManager, &AgentManager::agentError, &app,
+                     [=](const QString &agentId, const QString &error) {
+        QString name = agentManager->agentName(agentId);
+        if (name.isEmpty())
+            name = i18n("Agent");
+        auto *notif = new KNotification(QStringLiteral("agentError"));
+        notif->setTitle(i18n("Agent Error"));
+        notif->setText(i18n("%1: %2", name, error));
+        notif->setIconName(QStringLiteral("kductor"));
+        auto *openAction = notif->addDefaultAction(i18n("Open Kductor"));
+        QObject::connect(openAction, &KNotificationAction::activated, qApp, raiseWindow);
+        notif->sendEvent();
+    });
+
     if (rootWindow) {
         QObject::connect(tray, &KStatusNotifierItem::activateRequested, rootWindow, [rootWindow](bool, const QPoint &) {
             if (rootWindow->isVisible()) {

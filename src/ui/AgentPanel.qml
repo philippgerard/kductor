@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import org.kde.kirigami as Kirigami
 import org.kde.kductor
 
@@ -11,10 +12,11 @@ ColumnLayout {
     required property string workingDir
 
     property int agentStatus: AgentManager.agentStatus(agentId)
-    property string agentActivity: ""
+    property string agentActivity: AgentManager.agentActivity(agentId)
     property var outputModel: AgentManager.outputModel(agentId)
     property int contextUsed: 0
     property int contextWindow: 0
+    property double agentCost: AgentManager.agentCost(agentId)
 
     signal closeRequested(string agentId)
 
@@ -41,6 +43,25 @@ ColumnLayout {
                 agentPanel.contextUsed = used;
                 agentPanel.contextWindow = window;
             }
+        }
+        function onAgentCostChanged(id, cost) {
+            if (id === agentPanel.agentId)
+                agentPanel.agentCost = cost;
+        }
+    }
+
+    // Keyboard-accessible alternative to drag-and-drop screenshot attachment.
+    FileDialog {
+        id: attachDialog
+        title: i18n("Attach Screenshots")
+        fileMode: FileDialog.OpenFiles
+        nameFilters: [i18n("Images (*.png *.jpg *.jpeg *.gif *.bmp *.webp *.svg)")]
+        onAccepted: {
+            for (let i = 0; i < selectedFiles.length; i++) {
+                let path = decodeURIComponent(selectedFiles[i].toString().replace("file://", ""));
+                commandBar.addImage(path);
+            }
+            commandBar.focusInput();
         }
     }
 
@@ -109,9 +130,9 @@ ColumnLayout {
 
             Kirigami.Icon {
                 Layout.alignment: Qt.AlignHCenter
-                source: "image-x-generic-symbolic"
-                width: Kirigami.Units.iconSizes.huge
-                height: width
+                source: "image-x-generic"
+                Layout.preferredWidth: Kirigami.Units.iconSizes.huge
+                Layout.preferredHeight: Kirigami.Units.iconSizes.huge
                 color: Kirigami.Theme.highlightColor
             }
             QQC2.Label {
@@ -137,6 +158,16 @@ ColumnLayout {
             status: agentPanel.agentStatus
         }
 
+        // Current activity (what the agent is doing right now)
+        QQC2.Label {
+            visible: agentPanel.agentStatus === 2 && agentPanel.agentActivity.length > 0
+            text: agentPanel.agentActivity
+            elide: Text.ElideRight
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 16
+            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            opacity: 0.7
+        }
+
         // Context usage
         QQC2.Label {
             visible: contextUsed > 0
@@ -150,7 +181,19 @@ ColumnLayout {
                 return usedK + "k tokens";
             }
             font.pointSize: Kirigami.Theme.smallFont.pointSize
-            opacity: 0.4
+            opacity: 0.5
+            QQC2.ToolTip.text: i18n("Context window used")
+            QQC2.ToolTip.visible: hovered
+        }
+
+        // Cumulative cost for this agent
+        QQC2.Label {
+            visible: agentPanel.agentCost > 0
+            text: "$" + agentPanel.agentCost.toFixed(agentPanel.agentCost < 1 ? 3 : 2)
+            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            opacity: 0.5
+            QQC2.ToolTip.text: i18n("Total cost of this agent session")
+            QQC2.ToolTip.visible: hovered
         }
 
         Item { Layout.fillWidth: true }
@@ -160,6 +203,9 @@ ColumnLayout {
             textRole: "label"
             valueRole: "value"
             implicitWidth: Kirigami.Units.gridUnit * 8
+            Accessible.name: i18n("Model")
+            QQC2.ToolTip.text: i18n("Model for this agent")
+            QQC2.ToolTip.visible: hovered
             model: [
                 {label: "Fable 5",    value: "fable"},
                 {label: "Opus 4.6",   value: "opus"},
@@ -174,9 +220,11 @@ ColumnLayout {
 
         QQC2.ToolButton {
             icon.name: "media-playback-stop-symbolic"
-            visible: agentPanel.agentStatus === 2
+            // Allow stopping while Starting (1) or Running (2).
+            visible: agentPanel.agentStatus === 1 || agentPanel.agentStatus === 2
             flat: true
             onClicked: AgentManager.stopAgent(agentPanel.agentId)
+            Accessible.name: i18n("Stop agent")
             QQC2.ToolTip.text: i18n("Stop agent")
             QQC2.ToolTip.visible: hovered
         }
@@ -188,9 +236,10 @@ ColumnLayout {
                 if (agentPanel.agentStatus === 1 || agentPanel.agentStatus === 2) {
                     closeAgentDialog.open();
                 } else {
-                    agentPanel.closeRequested(agentPanel.agentId);
+                    closeIdleDialog.open();
                 }
             }
+            Accessible.name: i18n("Close agent")
             QQC2.ToolTip.text: i18n("Close agent")
             QQC2.ToolTip.visible: hovered
         }
@@ -207,6 +256,23 @@ ColumnLayout {
                 icon.name: "tab-close-symbolic"
                 onTriggered: {
                     closeAgentDialog.close();
+                    agentPanel.closeRequested(agentPanel.agentId);
+                }
+            }
+        ]
+    }
+
+    Kirigami.PromptDialog {
+        id: closeIdleDialog
+        title: i18n("Close Agent")
+        subtitle: i18n("Closing this agent permanently deletes its conversation and output history. Continue?")
+        standardButtons: Kirigami.Dialog.Cancel
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Close Agent")
+                icon.name: "tab-close-symbolic"
+                onTriggered: {
+                    closeIdleDialog.close();
                     agentPanel.closeRequested(agentPanel.agentId);
                 }
             }
@@ -236,33 +302,48 @@ ColumnLayout {
         Layout.rightMargin: Kirigami.Units.largeSpacing
         Layout.topMargin: Kirigami.Units.smallSpacing
         Layout.bottomMargin: Kirigami.Units.smallSpacing
+        // Disable sending while the agent is Starting/Running so prompts are
+        // never silently dropped.
+        busy: agentPanel.agentStatus === 1 || agentPanel.agentStatus === 2
+        onAttachRequested: attachDialog.open()
         onPromptSubmitted: function(prompt, imagePaths) {
             if (!AgentManager.claudeAvailable) {
                 if (agentPanel.outputModel)
                     agentPanel.outputModel.appendError(i18n("Claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code"));
-                return;
-            }
-            if (agentPanel.agentStatus === 0 && !AgentManager.canStartAgent()) {
-                if (agentPanel.outputModel)
-                    agentPanel.outputModel.appendError(i18n("Max concurrent agents reached (%1). Stop an agent first.", AgentManager.maxConcurrentAgents));
-                return;
+                return; // keep the typed prompt
             }
 
-            // Build display text
+            // A previously-run agent (e.g. restored after restart) has a session
+            // to resume even while Idle; a brand-new agent starts fresh.
+            let hasSession = AgentManager.agentSessionId(agentPanel.agentId).length > 0;
+            let fresh = agentPanel.agentStatus === 0 && !hasSession;
+
+            if (fresh && !AgentManager.canStartAgent()) {
+                if (agentPanel.outputModel)
+                    agentPanel.outputModel.appendError(i18n("Max concurrent agents reached (%1). Stop an agent first.", AgentManager.maxConcurrentAgents));
+                return; // keep the typed prompt
+            }
+
+            let ok = fresh
+                ? AgentManager.startAgent(agentPanel.agentId, agentPanel.workingDir, prompt, modelPicker.currentValue, imagePaths)
+                : AgentManager.sendPrompt(agentPanel.agentId, agentPanel.workingDir, prompt, modelPicker.currentValue, imagePaths);
+
+            if (!ok) {
+                if (agentPanel.outputModel)
+                    agentPanel.outputModel.appendError(i18n("Agent is busy — wait for it to finish before sending."));
+                return; // keep the typed prompt
+            }
+
+            // Echo the message only once it was actually accepted.
             let displayText = prompt;
             if (imagePaths.length > 0) {
                 let names = imagePaths.map(function(p) { return p.split('/').pop(); });
-                let prefix = "📎 " + names.join(", ");
+                let prefix = i18n("Attached: %1", names.join(", "));
                 displayText = prompt.length > 0 ? prefix + "\n" + prompt : prefix;
             }
             if (agentPanel.outputModel)
                 agentPanel.outputModel.appendSystem(displayText);
-
-            if (agentPanel.agentStatus === 0) {
-                AgentManager.startAgent(agentPanel.agentId, agentPanel.workingDir, prompt, modelPicker.currentValue, imagePaths);
-            } else {
-                AgentManager.sendPrompt(agentPanel.agentId, agentPanel.workingDir, prompt, modelPicker.currentValue, imagePaths);
-            }
+            commandBar.acceptSubmit();
         }
     }
 }

@@ -38,7 +38,7 @@ Item {
             }
 
             ColumnLayout {
-                spacing: 2
+                spacing: Kirigami.Units.smallSpacing
                 Layout.fillWidth: true
 
                 Kirigami.Heading {
@@ -63,11 +63,10 @@ Item {
             spacing: Kirigami.Units.largeSpacing * 2
 
             ColumnLayout {
-                spacing: 2
-                QQC2.Label {
+                spacing: Kirigami.Units.smallSpacing
+                Kirigami.Heading {
                     text: branches.length.toString()
-                    font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.5
-                    font.bold: true
+                    level: 1
                 }
                 QQC2.Label {
                     text: i18n("Branches")
@@ -77,11 +76,10 @@ Item {
             }
 
             ColumnLayout {
-                spacing: 2
-                QQC2.Label {
+                spacing: Kirigami.Units.smallSpacing
+                Kirigami.Heading {
                     text: workspaces.length.toString()
-                    font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.5
-                    font.bold: true
+                    level: 1
                 }
                 QQC2.Label {
                     text: i18n("Workspaces")
@@ -91,8 +89,8 @@ Item {
             }
 
             ColumnLayout {
-                spacing: 2
-                QQC2.Label {
+                spacing: Kirigami.Units.smallSpacing
+                Kirigami.Heading {
                     text: {
                         let count = 0;
                         for (let ws of workspaces) {
@@ -100,8 +98,7 @@ Item {
                         }
                         return count.toString();
                     }
-                    font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.5
-                    font.bold: true
+                    level: 1
                 }
                 QQC2.Label {
                     text: i18n("Agents")
@@ -126,6 +123,7 @@ Item {
             model: workspaces
             delegate: QQC2.ItemDelegate {
                 Layout.fillWidth: true
+                Accessible.name: modelData.name
                 contentItem: RowLayout {
                     spacing: Kirigami.Units.smallSpacing
                     Kirigami.Icon {

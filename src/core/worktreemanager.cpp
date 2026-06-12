@@ -359,36 +359,25 @@ bool WorktreeManager::hasRemote(const QString &worktreePath) const
     return !QString::fromUtf8(proc.readAllStandardOutput()).trimmed().isEmpty();
 }
 
-QString WorktreeManager::detectForge(const QString &worktreePath) const
+static QString forgeFromUrl(const QString &rawUrl)
 {
-    QProcess proc;
-    proc.setWorkingDirectory(worktreePath);
-    proc.start(QStringLiteral("git"), {QStringLiteral("remote"), QStringLiteral("get-url"), QStringLiteral("origin")});
-    if (!proc.waitForFinished(5000))
+    const QString url = rawUrl.toLower();
+    if (url.isEmpty())
         return QStringLiteral("unknown");
-
-    QString url = QString::fromUtf8(proc.readAllStandardOutput()).trimmed().toLower();
     if (url.contains(QStringLiteral("github.com")))
         return QStringLiteral("github");
     if (url.contains(QStringLiteral("gitea")) || url.contains(QStringLiteral("forgejo")))
         return QStringLiteral("gitea");
     if (url.contains(QStringLiteral("gitlab")))
         return QStringLiteral("gitlab");
-    // If it has a remote but not a known forge, assume self-hosted
-    if (!url.isEmpty())
-        return QStringLiteral("other");
-    return QStringLiteral("unknown");
+    // Has a remote but not a known forge — assume self-hosted.
+    return QStringLiteral("other");
 }
 
-QString WorktreeManager::remoteWebUrl(const QString &worktreePath) const
+static QString webUrlFromRemote(QString url)
 {
-    QProcess proc;
-    proc.setWorkingDirectory(worktreePath);
-    proc.start(QStringLiteral("git"), {QStringLiteral("remote"), QStringLiteral("get-url"), QStringLiteral("origin")});
-    if (!proc.waitForFinished(5000))
+    if (url.isEmpty())
         return {};
-
-    QString url = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
 
     // Convert SSH URL to HTTPS: ssh://git@host:port/user/repo.git -> https://host/user/repo
     if (url.startsWith(QStringLiteral("ssh://"))) {
@@ -404,9 +393,39 @@ QString WorktreeManager::remoteWebUrl(const QString &worktreePath) const
         url = QStringLiteral("https://") + url;
     }
 
-    // Remove .git suffix
     if (url.endsWith(QStringLiteral(".git")))
         url.chop(4);
 
     return url;
+}
+
+static QString readRemoteUrl(const QString &worktreePath)
+{
+    QProcess proc;
+    proc.setWorkingDirectory(worktreePath);
+    proc.start(QStringLiteral("git"), {QStringLiteral("remote"), QStringLiteral("get-url"), QStringLiteral("origin")});
+    if (!proc.waitForFinished(5000))
+        return {};
+    return QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+}
+
+QString WorktreeManager::detectForge(const QString &worktreePath) const
+{
+    return forgeFromUrl(readRemoteUrl(worktreePath));
+}
+
+QString WorktreeManager::remoteWebUrl(const QString &worktreePath) const
+{
+    return webUrlFromRemote(readRemoteUrl(worktreePath));
+}
+
+QVariantMap WorktreeManager::remoteInfo(const QString &worktreePath) const
+{
+    // One git invocation instead of three on the workspace-open path.
+    const QString url = readRemoteUrl(worktreePath);
+    return {
+        {QStringLiteral("hasRemote"), !url.isEmpty()},
+        {QStringLiteral("forge"), forgeFromUrl(url)},
+        {QStringLiteral("webUrl"), webUrlFromRemote(url)},
+    };
 }

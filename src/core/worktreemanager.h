@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QVariantMap>
 #include <QDir>
 
 #include "workspace.h"
@@ -35,6 +36,8 @@ public:
     Q_INVOKABLE void checkPrStatus(const QString &worktreePath);
     Q_INVOKABLE QString detectForge(const QString &worktreePath) const; // "github", "gitea", or "unknown"
     Q_INVOKABLE QString remoteWebUrl(const QString &worktreePath) const;
+    // hasRemote/detectForge/remoteWebUrl in one git call: {hasRemote, forge, webUrl}.
+    Q_INVOKABLE QVariantMap remoteInfo(const QString &worktreePath) const;
 
     Workspace lastCreatedWorkspace() const { return m_lastCreated; }
 

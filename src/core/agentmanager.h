@@ -42,6 +42,7 @@ public:
     Q_INVOKABLE QString agentActivity(const QString &agentId) const;
     Q_INVOKABLE QString agentSessionId(const QString &agentId) const;
     Q_INVOKABLE double agentCost(const QString &agentId) const;
+    Q_INVOKABLE QString workspaceForAgent(const QString &agentId) const { return m_agentToWorkspace.value(agentId); }
 
     Q_INVOKABLE bool canStartAgent() const;
     Q_INVOKABLE int workspaceAgentStatus(const QString &workspaceId) const; // 0=idle, 2=running

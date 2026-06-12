@@ -1,4 +1,5 @@
 import QtQuick
+import QtCore
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import QtQuick.Dialogs
@@ -16,6 +17,16 @@ Kirigami.ApplicationWindow {
 
     property string selectedWorkspaceId: ""
     property string selectedWorkspaceName: ""
+
+    // Persist window geometry and sidebar width across restarts.
+    property real sidebarWidth: Kirigami.Units.gridUnit * 14
+    Settings {
+        id: windowSettings
+        category: "window"
+        property alias width: root.width
+        property alias height: root.height
+        property alias sidebarWidth: root.sidebarWidth
+    }
 
     function loadRepoOverview(repoPath) {
         selectedWorkspaceId = "";
@@ -38,6 +49,15 @@ Kirigami.ApplicationWindow {
         subtitle: i18np("%1 agent is still running. Quit anyway?", "%1 agents are still running. Quit anyway?", AgentManager.activeCount)
         standardButtons: Kirigami.Dialog.Cancel
         customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Continue in Background")
+                icon.name: "window-minimize-symbolic"
+                visible: AgentManager.showInTray
+                onTriggered: {
+                    quitDialog.close();
+                    root.hide(); // keep agents running; restore from the tray
+                }
+            },
             Kirigami.Action {
                 text: i18n("Stop & Quit")
                 icon.name: "application-exit"
@@ -94,9 +114,12 @@ Kirigami.ApplicationWindow {
             // --- Sidebar ---
             Rectangle {
                 Layout.fillHeight: true
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                Layout.preferredWidth: root.sidebarWidth
                 Layout.minimumWidth: Kirigami.Units.gridUnit * 10
-                color: Kirigami.Theme.backgroundColor
+                Layout.maximumWidth: Kirigami.Units.gridUnit * 28
+                // Subtle tint so the sidebar reads as distinct from the content.
+                color: Kirigami.ColorUtils.linearInterpolation(
+                    Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, 0.04)
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -136,6 +159,7 @@ Kirigami.ApplicationWindow {
                                         // Repo header
                                         QQC2.ItemDelegate {
                                             Layout.fillWidth: true
+                                            Accessible.name: i18n("Repository %1", repoSection.repoName)
                                             contentItem: RowLayout {
                                                 spacing: Kirigami.Units.smallSpacing
                                                 Kirigami.Icon {
@@ -152,8 +176,7 @@ Kirigami.ApplicationWindow {
                                                 }
                                                 QQC2.ToolButton {
                                                     icon.name: "list-add-symbolic"
-                                                    implicitWidth: Kirigami.Units.iconSizes.medium
-                                                    implicitHeight: Kirigami.Units.iconSizes.medium
+                                                    Accessible.name: i18n("New workspace in %1", repoSection.repoName)
                                                     onClicked: createSheet.openForRepo(repoSection.modelData)
                                                     QQC2.ToolTip.text: i18n("New workspace")
                                                     QQC2.ToolTip.visible: hovered
@@ -172,6 +195,15 @@ Kirigami.ApplicationWindow {
                                                 highlighted: modelData.id === selectedWorkspaceId
                                                 leftPadding: Kirigami.Units.largeSpacing * 2
 
+                                                readonly property bool hasAgents: AgentManager.activeCount >= 0 && AgentManager.agentsForWorkspace(modelData.id).length > 0
+                                                readonly property bool agentsRunning: AgentManager.activeCount >= 0 && AgentManager.workspaceAgentStatus(modelData.id) === 2
+                                                readonly property string stateText: agentsRunning ? i18n("agent working")
+                                                    : hasAgents ? i18n("agents idle") : i18n("no agents")
+
+                                                Accessible.name: i18n("%1 — %2", modelData.name, stateText)
+                                                QQC2.ToolTip.text: stateText
+                                                QQC2.ToolTip.visible: hovered && hasAgents
+
                                                 contentItem: RowLayout {
                                                     spacing: Kirigami.Units.smallSpacing
 
@@ -181,21 +213,18 @@ Kirigami.ApplicationWindow {
                                                         height: width
                                                         radius: width / 2
 
-                                                        readonly property bool hasAgents: AgentManager.activeCount >= 0 && AgentManager.agentsForWorkspace(modelData.id).length > 0
-                                                        readonly property bool agentsRunning: AgentManager.activeCount >= 0 && AgentManager.workspaceAgentStatus(modelData.id) === 2
-
                                                         color: {
-                                                            if (agentsRunning) return Kirigami.Theme.highlightedTextColor;
-                                                            if (hasAgents) return Kirigami.Theme.positiveTextColor;
+                                                            if (wsItem.agentsRunning) return Kirigami.Theme.focusColor;
+                                                            if (wsItem.hasAgents) return Kirigami.Theme.positiveTextColor;
                                                             return Kirigami.Theme.disabledTextColor;
                                                         }
-                                                        opacity: (!hasAgents) ? 0.4 : 1.0
+                                                        opacity: (!wsItem.hasAgents) ? 0.4 : 1.0
 
                                                         SequentialAnimation on opacity {
-                                                            running: wsDot.agentsRunning
+                                                            running: wsItem.agentsRunning && Kirigami.Units.longDuration > 1
                                                             loops: Animation.Infinite
-                                                            NumberAnimation { to: 0.3; duration: 800; easing.type: Easing.InOutQuad }
-                                                            NumberAnimation { to: 1.0; duration: 800; easing.type: Easing.InOutQuad }
+                                                            NumberAnimation { to: 0.3; duration: Kirigami.Units.longDuration * 4; easing.type: Easing.InOutQuad }
+                                                            NumberAnimation { to: 1.0; duration: Kirigami.Units.longDuration * 4; easing.type: Easing.InOutQuad }
                                                         }
                                                     }
 
@@ -218,6 +247,17 @@ Kirigami.ApplicationWindow {
                                                         sourceBranch: modelData.sourceBranch,
                                                         repoPath: modelData.repoPath
                                                     });
+                                                }
+
+                                                // F2 renames the focused workspace (keyboard alternative
+                                                // to the right-click menu).
+                                                Keys.onPressed: function(event) {
+                                                    if (event.key === Qt.Key_F2) {
+                                                        renameDialog.workspaceId = modelData.id;
+                                                        renameDialog.currentName = modelData.name;
+                                                        renameDialog.open();
+                                                        event.accepted = true;
+                                                    }
                                                 }
 
                                                 QQC2.Menu {
@@ -246,6 +286,7 @@ Kirigami.ApplicationWindow {
                                 QQC2.ItemDelegate {
                                     Layout.fillWidth: true
                                     Layout.topMargin: Kirigami.Units.smallSpacing
+                                    Accessible.name: i18n("Add repository")
                                     contentItem: RowLayout {
                                         spacing: Kirigami.Units.smallSpacing
                                         Kirigami.Icon {
@@ -268,15 +309,53 @@ Kirigami.ApplicationWindow {
                 }
             }
 
-            // Vertical separator
-            Kirigami.Separator {
+            // Vertical separator, draggable to resize the sidebar
+            Item {
                 Layout.fillHeight: true
+                Layout.preferredWidth: 1
+
+                Kirigami.Separator { anchors.fill: parent }
+
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.leftMargin: -Kirigami.Units.smallSpacing
+                    anchors.rightMargin: -Kirigami.Units.smallSpacing
+                    cursorShape: Qt.SizeHorCursor
+                    onPositionChanged: function(mouse) {
+                        if (!pressed) return;
+                        let gx = mapToItem(null, mouse.x, 0).x;
+                        root.sidebarWidth = Math.max(Kirigami.Units.gridUnit * 10,
+                            Math.min(Kirigami.Units.gridUnit * 28, gx));
+                    }
+                }
             }
 
             // --- Main content ---
-            Item {
+            ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                spacing: 0
+
+                // Onboarding: warn when the claude CLI is missing, before the
+                // user has invested in creating repos/workspaces/agents.
+                Kirigami.InlineMessage {
+                    Layout.fillWidth: true
+                    Layout.margins: Kirigami.Units.smallSpacing
+                    type: Kirigami.MessageType.Warning
+                    visible: !AgentManager.claudeAvailable
+                    text: i18n("Claude Code CLI not found. Install it with: npm install -g @anthropic-ai/claude-code")
+                    actions: [
+                        Kirigami.Action {
+                            text: i18n("Check again")
+                            icon.name: "view-refresh"
+                            onTriggered: AgentManager.redetectClaude()
+                        }
+                    ]
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
 
                 // Empty state
                 Kirigami.PlaceholderMessage {
@@ -302,6 +381,7 @@ Kirigami.ApplicationWindow {
                 Loader {
                     id: workspaceLoader
                     anchors.fill: parent
+                }
                 }
             }
         }
@@ -331,9 +411,12 @@ Kirigami.ApplicationWindow {
         id: addRepoDialog
         title: i18n("Select Git Repository")
         onAccepted: {
-            let path = selectedFolder.toString().replace("file://", "");
+            let path = decodeURIComponent(selectedFolder.toString().replace("file://", ""));
             if (GitManager.openRepository(path)) {
                 WorkspaceModel.addRepo(path);
+            } else {
+                applicationWindow().showPassiveNotification(
+                    i18n("Not a Git repository: %1", path), 5000);
             }
         }
     }

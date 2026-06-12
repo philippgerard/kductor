@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QtConcurrentRun>
 
 #include <git2.h>
 
@@ -481,6 +482,20 @@ QVariantList GitManager::getDetailedDiff(const QString &worktreePath, const QStr
     git_diff_free(diff);
     git_repository_free(wtRepo);
     return collector.files;
+}
+
+void GitManager::requestDetailedDiff(const QString &worktreePath, const QString &sourceBranch, int mode)
+{
+    // getDetailedDiff opens its own repository handle and touches no shared
+    // member state, so it is safe to run on a worker thread. This keeps a large
+    // diff from freezing the GUI.
+    (void) QtConcurrent::run([this, worktreePath, sourceBranch, mode]() {
+        const bool ok = QFileInfo::exists(worktreePath);
+        QVariantList files = ok ? getDetailedDiff(worktreePath, sourceBranch, mode) : QVariantList();
+        QMetaObject::invokeMethod(this, [this, files, mode, ok]() {
+            Q_EMIT detailedDiffReady(files, mode, ok);
+        }, Qt::QueuedConnection);
+    });
 }
 
 bool GitManager::hasUncommittedChanges(const QString &worktreePath) const

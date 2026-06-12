@@ -21,6 +21,28 @@ Kirigami.Page {
     property int nextAgentNumber: 1
     property bool showingDiff: false
     property bool operationBusy: false
+    property string operationName: ""
+
+    function operationLabel(op) {
+        if (op === "push") return i18n("Pushing branch…");
+        if (op === "pr") return i18n("Creating pull request…");
+        if (op === "merge-pr") return i18n("Merging pull request…");
+        if (op === "merge") return i18n("Merging locally…");
+        if (op === "commit") return i18n("Committing changes…");
+        if (op === "archive") return i18n("Archiving workspace…");
+        if (op === "pull") return i18n("Updating source branch…");
+        return i18n("Working…");
+    }
+
+    // Clipboard helper (QtQuick exposes copy() only through TextEdit).
+    TextEdit { id: clipboardHelper; visible: false }
+    function copyToClipboard(text, label) {
+        clipboardHelper.text = text;
+        clipboardHelper.selectAll();
+        clipboardHelper.copy();
+        clipboardHelper.text = "";
+        applicationWindow().showPassiveNotification(label || i18n("Copied to clipboard"), 1500);
+    }
     property string forge: ""
     property string webUrl: ""
     property bool remoteAvailable: false
@@ -55,7 +77,9 @@ Kirigami.Page {
         id: prPollTimer
         interval: 15000
         repeat: true
+        // Don't poll the remote while the window is hidden in the tray.
         running: remoteAvailable && prState === "OPEN"
+                 && (applicationWindow().visible || false)
         onTriggered: WorktreeManager.checkPrStatus(worktreePath)
     }
 
@@ -88,9 +112,10 @@ Kirigami.Page {
     }
 
     Component.onCompleted: {
-        remoteAvailable = WorktreeManager.hasRemote(worktreePath);
-        forge = WorktreeManager.detectForge(worktreePath);
-        webUrl = WorktreeManager.remoteWebUrl(worktreePath);
+        let info = WorktreeManager.remoteInfo(worktreePath);
+        remoteAvailable = info.hasRemote;
+        forge = info.forge;
+        webUrl = info.webUrl;
         if (remoteAvailable) WorktreeManager.checkPrStatus(worktreePath);
         let existing = AgentManager.agentsForWorkspace(workspaceId);
         if (existing.length > 0) {
@@ -137,6 +162,7 @@ Kirigami.Page {
         target: WorktreeManager
         function onOperationStarted(op) {
             operationBusy = true;
+            operationName = op;
             statusMessage.visible = false;
         }
         function onOperationSucceeded(op, result) {
@@ -151,7 +177,11 @@ Kirigami.Page {
                 return;
             }
             let msg = "";
-            if (op === "push") msg = i18n("Branch pushed.");
+            if (op === "commit") {
+                msg = i18n("Changes committed.");
+                if (showingDiff) diffViewer.reload();
+            }
+            else if (op === "push") msg = i18n("Branch pushed.");
             else if (op === "pr") {
                 msg = result || i18n("Pull request created.");
                 // Refresh PR status immediately
@@ -176,6 +206,23 @@ Kirigami.Page {
     // --- Actions ---
     // Keyboard shortcuts
     Shortcut { sequence: "Ctrl+D"; onActivated: { showingDiff = !showingDiff; if (showingDiff) diffViewer.reload(); } }
+    Shortcut { sequence: "Ctrl+T"; onActivated: addAgent() }
+    Shortcut {
+        sequence: "Ctrl+PgDown"
+        onActivated: {
+            if (agents.length < 2) return;
+            let i = agentIndex(currentAgentId);
+            currentAgentId = agents[(i + 1) % agents.length].id;
+        }
+    }
+    Shortcut {
+        sequence: "Ctrl+PgUp"
+        onActivated: {
+            if (agents.length < 2) return;
+            let i = agentIndex(currentAgentId);
+            currentAgentId = agents[(i - 1 + agents.length) % agents.length].id;
+        }
+    }
 
     // --- Header ---
     header: ColumnLayout {
@@ -223,18 +270,42 @@ Kirigami.Page {
                     display: QQC2.AbstractButton.TextBesideIcon
                     onClicked: { showingDiff = !showingDiff; if (showingDiff) diffViewer.reload(); }
                 }
-                Rectangle {
+                QQC2.ToolButton {
+                    icon.name: "vcs-commit"
+                    text: i18n("Commit")
+                    display: QQC2.AbstractButton.TextBesideIcon
+                    enabled: !operationBusy
+                    onClicked: commitDialog.open()
+                    QQC2.ToolTip.text: i18n("Commit all changes in this workspace")
+                    QQC2.ToolTip.visible: hovered
+                }
+                Item {
                     visible: remoteAvailable && prState === "OPEN"
-                    width: Kirigami.Units.smallSpacing * 2.5
-                    height: width
-                    radius: width / 2
                     Layout.alignment: Qt.AlignVCenter
-                    color: {
-                        if (prChecks === "success" && (prMergeable === "MERGEABLE" || prMergeable === "")) return Kirigami.Theme.positiveTextColor;
-                        if (prChecks === "failure" || prMergeable === "CONFLICTING") return Kirigami.Theme.negativeTextColor;
-                        if (prChecks === "pending") return Kirigami.Theme.neutralTextColor;
-                        return Kirigami.Theme.positiveTextColor;
+                    implicitWidth: Kirigami.Units.smallSpacing * 2.5
+                    implicitHeight: width
+                    readonly property string prStateText: {
+                        if (prChecks === "failure") return i18n("PR checks failing");
+                        if (prMergeable === "CONFLICTING") return i18n("PR has conflicts");
+                        if (prChecks === "pending") return i18n("PR checks running");
+                        if (prChecks === "success") return i18n("PR checks passed");
+                        return i18n("Pull request open");
                     }
+                    Accessible.role: Accessible.Indicator
+                    Accessible.name: prStateText
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: width / 2
+                        color: {
+                            if (prChecks === "success" && (prMergeable === "MERGEABLE" || prMergeable === "")) return Kirigami.Theme.positiveTextColor;
+                            if (prChecks === "failure" || prMergeable === "CONFLICTING") return Kirigami.Theme.negativeTextColor;
+                            if (prChecks === "pending") return Kirigami.Theme.neutralTextColor;
+                            return Kirigami.Theme.positiveTextColor;
+                        }
+                    }
+                    HoverHandler { id: prDotHover }
+                    QQC2.ToolTip.text: prStateText
+                    QQC2.ToolTip.visible: prDotHover.hovered
                 }
                 QQC2.ToolButton {
                     visible: remoteAvailable
@@ -274,15 +345,73 @@ Kirigami.Page {
                             icon.name: "vcs-merge"
                             onTriggered: guardedOperation("mergeLocal")
                         }
+                    }
+                }
+
+                QQC2.ToolButton {
+                    id: actionsButton
+                    icon.name: "application-menu-symbolic"
+                    Accessible.name: i18n("Workspace actions")
+                    QQC2.ToolTip.text: i18n("Workspace actions")
+                    QQC2.ToolTip.visible: hovered
+                    onClicked: actionsMenu.popup(actionsButton, 0, actionsButton.height)
+
+                    QQC2.Menu {
+                        id: actionsMenu
+                        QQC2.MenuItem {
+                            text: i18n("Open folder")
+                            icon.name: "folder-open-symbolic"
+                            onTriggered: Qt.openUrlExternally("file://" + worktreePath)
+                        }
+                        QQC2.MenuItem {
+                            text: i18n("Copy branch name")
+                            icon.name: "edit-copy-symbolic"
+                            onTriggered: copyToClipboard(branchName, i18n("Branch name copied"))
+                        }
+                        QQC2.MenuItem {
+                            text: i18n("Copy worktree path")
+                            icon.name: "edit-copy-symbolic"
+                            onTriggered: copyToClipboard(worktreePath, i18n("Path copied"))
+                        }
+                        QQC2.MenuItem {
+                            text: i18n("Copy PR URL")
+                            icon.name: "edit-copy-symbolic"
+                            enabled: prUrl.length > 0
+                            visible: prState === "OPEN"
+                            onTriggered: copyToClipboard(prUrl, i18n("PR URL copied"))
+                        }
                         QQC2.MenuSeparator {}
                         QQC2.MenuItem {
-                            text: i18n("Archive workspace")
+                            text: i18n("Archive workspace…")
                             icon.name: "archive-remove"
                             onTriggered: archiveDialog.open()
                         }
                     }
                 }
             }
+        }
+
+        // Operation progress banner
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: Kirigami.Units.largeSpacing
+            Layout.rightMargin: Kirigami.Units.largeSpacing
+            Layout.topMargin: Kirigami.Units.smallSpacing
+            Layout.bottomMargin: Kirigami.Units.smallSpacing
+            visible: operationBusy
+            spacing: Kirigami.Units.smallSpacing
+
+            QQC2.BusyIndicator {
+                running: operationBusy
+                implicitWidth: Kirigami.Units.iconSizes.small
+                implicitHeight: Kirigami.Units.iconSizes.small
+            }
+            QQC2.Label {
+                text: operationLabel(operationName)
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                opacity: 0.7
+            }
+            Item { Layout.fillWidth: true }
         }
 
         // Status message banner
@@ -393,8 +522,19 @@ Kirigami.Page {
     Kirigami.PromptDialog {
         id: uncommittedDialog
         title: i18n("Uncommitted Changes")
-        subtitle: i18n("This workspace has uncommitted changes that will not be included.")
+        subtitle: i18n("This workspace has uncommitted changes that will not be included. Commit them first?")
         standardButtons: Kirigami.Dialog.Cancel
+
+        onOpened: {
+            guardCommitField.text = "";
+            guardCommitField.forceActiveFocus();
+        }
+
+        QQC2.TextField {
+            id: guardCommitField
+            placeholderText: i18n("Commit message (optional)")
+        }
+
         customFooterActions: [
             Kirigami.Action {
                 text: i18n("Commit && Continue")
@@ -402,6 +542,7 @@ Kirigami.Page {
                 onTriggered: {
                     uncommittedDialog.close();
                     let op = pendingOperation;
+                    let msg = guardCommitField.text;
                     function onCommitDone(finishedOp, result) {
                         if (finishedOp !== "commit") return;
                         WorktreeManager.operationSucceeded.disconnect(onCommitDone);
@@ -415,7 +556,7 @@ Kirigami.Page {
                     }
                     WorktreeManager.operationSucceeded.connect(onCommitDone);
                     WorktreeManager.operationFailed.connect(onCommitFail);
-                    WorktreeManager.commitAll(worktreePath);
+                    WorktreeManager.commitAll(worktreePath, msg);
                 }
             },
             Kirigami.Action {
@@ -425,6 +566,38 @@ Kirigami.Page {
                     uncommittedDialog.close();
                     executePendingOperation(pendingOperation);
                 }
+            }
+        ]
+    }
+
+    // Standalone commit (from the toolbar Commit button)
+    Kirigami.PromptDialog {
+        id: commitDialog
+        title: i18n("Commit Changes")
+        subtitle: i18n("Stage and commit all changes in this workspace.")
+        standardButtons: Kirigami.Dialog.Cancel
+
+        onOpened: {
+            commitField.text = "";
+            commitField.forceActiveFocus();
+        }
+
+        QQC2.TextField {
+            id: commitField
+            placeholderText: i18n("Commit message (optional)")
+            onAccepted: commitDialog.doCommit()
+        }
+
+        function doCommit() {
+            commitDialog.close();
+            WorktreeManager.commitAll(worktreePath, commitField.text);
+        }
+
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Commit")
+                icon.name: "vcs-commit"
+                onTriggered: commitDialog.doCommit()
             }
         ]
     }
@@ -509,6 +682,9 @@ Kirigami.Page {
         preferredWidth: Kirigami.Units.gridUnit * 24
         standardButtons: Kirigami.Dialog.Cancel
 
+        property bool hasUncommitted: false
+        onOpened: hasUncommitted = GitManager.hasUncommittedChanges(worktreePath)
+
         ColumnLayout {
             spacing: Kirigami.Units.largeSpacing
 
@@ -516,6 +692,13 @@ Kirigami.Page {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 text: i18n("Remove worktree and agent sessions?")
+            }
+
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                type: Kirigami.MessageType.Warning
+                visible: archiveDialog.hasUncommitted
+                text: i18n("This workspace has uncommitted changes that will be permanently lost.")
             }
 
             QQC2.CheckBox {

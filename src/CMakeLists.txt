@@ -37,7 +37,6 @@ ecm_add_qml_module(kductor
     URI org.kde.kductor
     QML_FILES
         ui/Main.qml
-        ui/DashboardPage.qml
         ui/WorkspacePage.qml
         ui/WorkspaceCreateSheet.qml
         ui/AgentPanel.qml
@@ -45,11 +44,10 @@ ecm_add_qml_module(kductor
         ui/RepoOverviewPage.qml
         ui/SettingsPage.qml
         ui/AboutPage.qml
-        ui/components/WorkspaceCard.qml
-        ui/components/AgentStatusCard.qml
         ui/components/StatusBadge.qml
         ui/components/StreamingTextArea.qml
         ui/components/CommandBar.qml
+        ui/components/CopyButton.qml
 )
 
 target_link_libraries(kductor PRIVATE

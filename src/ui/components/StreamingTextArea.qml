@@ -10,6 +10,9 @@ QQC2.ScrollView {
 
     property alias model: listView.model
 
+    // LineTypeRole = Qt.UserRole + 2 (see AgentOutputModel::Roles)
+    readonly property int lineTypeRole: 258
+
     ListView {
         id: listView
         clip: true
@@ -18,15 +21,47 @@ QQC2.ScrollView {
         rightMargin: Kirigami.Units.largeSpacing
         topMargin: Kirigami.Units.smallSpacing
         bottomMargin: Kirigami.Units.smallSpacing
+        activeFocusOnTab: true
+        Accessible.role: Accessible.List
+        Accessible.name: i18n("Agent output")
 
+        // Only follow the stream when the user is already at the bottom, so
+        // scrolling back to read older output is not yanked away on each line.
+        property bool autoScroll: true
+        onMovementEnded: autoScroll = atYEnd
         onCountChanged: {
-            Qt.callLater(function() {
-                listView.positionViewAtEnd();
-            });
+            if (autoScroll)
+                Qt.callLater(function() { listView.positionViewAtEnd(); });
         }
 
-        // Track which tool-use group indices are expanded
+        // Keyboard scrolling for accessibility.
+        Keys.onPressed: function(event) {
+            const page = listView.height * 0.9;
+            if (event.key === Qt.Key_PageDown) {
+                listView.contentY = Math.min(listView.contentY + page,
+                    listView.contentHeight - listView.height + listView.bottomMargin);
+                event.accepted = true;
+            } else if (event.key === Qt.Key_PageUp) {
+                listView.contentY = Math.max(listView.contentY - page, -listView.topMargin);
+                event.accepted = true;
+            } else if (event.key === Qt.Key_End) {
+                listView.positionViewAtEnd();
+                event.accepted = true;
+            } else if (event.key === Qt.Key_Home) {
+                listView.positionViewAtBeginning();
+                event.accepted = true;
+            }
+        }
+
+        // Track which tool-activity group (by start index) is expanded.
         property var expandedToolGroups: ({})
+
+        function typeAt(i) {
+            if (i < 0 || i >= listView.model.rowCount()) return -1;
+            return listView.model.data(listView.model.index(i, 0), streamView.lineTypeRole);
+        }
+        // Tool activity = a tool_use (2) or its tool_result (3).
+        function isToolActivity(t) { return t === 2 || t === 3; }
 
         delegate: Item {
             id: lineDelegate
@@ -36,35 +71,29 @@ QQC2.ScrollView {
             required property string toolName
             required property int index
 
-            // For tool use lines: is this the first in a consecutive run?
-            readonly property bool isToolUse: lineType === 2
-            readonly property bool prevIsToolUse: index > 0 && listView.model.data(listView.model.index(index - 1, 0), 258) === 2 // LineTypeRole = 258
-            readonly property bool isGroupStart: isToolUse && !prevIsToolUse
-            readonly property bool isGroupMember: isToolUse && prevIsToolUse
+            readonly property bool isTool: listView.isToolActivity(lineType)
+            readonly property bool prevIsTool: index > 0 && listView.isToolActivity(listView.typeAt(index - 1))
+            readonly property bool isGroupStart: isTool && !prevIsTool
 
-            // Find which group start index this tool use belongs to
             function findGroupStart() {
                 let i = index;
-                while (i > 0) {
-                    let prevType = listView.model.data(listView.model.index(i - 1, 0), 258);
-                    if (prevType !== 2) break;
+                while (i > 0 && listView.isToolActivity(listView.typeAt(i - 1)))
                     i--;
-                }
                 return i;
             }
-
-            // Count consecutive tool uses from a start index
-            function countGroupSize(startIdx) {
+            // Number of tool *uses* (actions) in this consecutive run.
+            function countActions(startIdx) {
                 let count = 0;
                 let total = listView.model.rowCount();
                 for (let i = startIdx; i < total; i++) {
-                    if (listView.model.data(listView.model.index(i, 0), 258) !== 2) break;
-                    count++;
+                    let t = listView.typeAt(i);
+                    if (!listView.isToolActivity(t)) break;
+                    if (t === 2) count++;
                 }
                 return count;
             }
 
-            readonly property int groupStartIdx: isToolUse ? findGroupStart() : -1
+            readonly property int groupStartIdx: isTool ? findGroupStart() : -1
             readonly property bool groupExpanded: groupStartIdx >= 0 && listView.expandedToolGroups[groupStartIdx] === true
 
             width: listView.width - listView.leftMargin - listView.rightMargin
@@ -104,19 +133,22 @@ QQC2.ScrollView {
 
                     QQC2.AbstractButton {
                         Layout.fillWidth: true
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: i18n("Thinking, %1", thinkingContent.visible ? i18n("expanded") : i18n("collapsed"))
                         contentItem: RowLayout {
                             spacing: Kirigami.Units.smallSpacing
                             Kirigami.Icon {
                                 source: thinkingContent.visible ? "arrow-down-symbolic" : "arrow-right-symbolic"
                                 Layout.preferredWidth: Kirigami.Units.iconSizes.small
                                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                opacity: 0.4
+                                opacity: 0.6
                             }
                             QQC2.Label {
                                 text: i18n("Thinking…")
                                 font.italic: true
                                 font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                opacity: 0.4
+                                opacity: 0.6
                             }
                             Item { Layout.fillWidth: true }
                         }
@@ -124,7 +156,7 @@ QQC2.ScrollView {
                         HoverHandler { cursorShape: Qt.PointingHandCursor }
                     }
 
-                    QQC2.Label {
+                    TextEdit {
                         id: thinkingContent
                         visible: false
                         Layout.fillWidth: true
@@ -133,12 +165,16 @@ QQC2.ScrollView {
                         wrapMode: Text.Wrap
                         font.italic: true
                         font.pointSize: Kirigami.Theme.smallFont.pointSize
-                        opacity: 0.5
+                        opacity: 0.7
                         textFormat: Text.PlainText
+                        readOnly: true
+                        selectByMouse: true
+                        color: Kirigami.Theme.textColor
+                        selectionColor: Kirigami.Theme.highlightColor
                     }
                 }
 
-                // Tool use — collapsible group header (only on first of consecutive run)
+                // Tool activity — collapsible group header (only on first of a run)
                 ColumnLayout {
                     visible: isGroupStart
                     Layout.fillWidth: true
@@ -148,21 +184,28 @@ QQC2.ScrollView {
 
                     QQC2.AbstractButton {
                         Layout.fillWidth: true
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: {
+                            let n = countActions(lineDelegate.index);
+                            return i18np("%1 action, %2", "%1 actions, %2", n,
+                                         groupExpanded ? i18n("expanded") : i18n("collapsed"));
+                        }
                         contentItem: RowLayout {
                             spacing: Kirigami.Units.smallSpacing
                             Kirigami.Icon {
                                 source: groupExpanded ? "arrow-down-symbolic" : "arrow-right-symbolic"
                                 Layout.preferredWidth: Kirigami.Units.iconSizes.small
                                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                opacity: 0.4
+                                opacity: 0.6
                             }
                             QQC2.Label {
                                 text: {
-                                    let n = countGroupSize(lineDelegate.index);
+                                    let n = countActions(lineDelegate.index);
                                     return i18np("%1 action", "%1 actions", n);
                                 }
                                 font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                opacity: 0.4
+                                opacity: 0.6
                             }
                             Item { Layout.fillWidth: true }
                         }
@@ -175,42 +218,54 @@ QQC2.ScrollView {
                     }
                 }
 
-                // Tool use — individual line (visible only when group is expanded)
+                // Tool use — individual action line (visible when group expanded)
                 RowLayout {
-                    visible: isToolUse && groupExpanded
+                    visible: lineType === 2 && groupExpanded
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
+                    Layout.topMargin: 1
                     spacing: Kirigami.Units.smallSpacing
 
                     Rectangle {
                         width: 2
                         Layout.fillHeight: true
                         color: Kirigami.Theme.focusColor
-                        opacity: 0.3
+                        opacity: 0.4
                         radius: 1
                     }
-                    QQC2.Label {
+                    TextEdit {
                         Layout.fillWidth: true
                         text: content
-                        font.family: "monospace"
+                        font.family: Kirigami.Theme.fixedWidthFont.family
                         font.pointSize: Kirigami.Theme.smallFont.pointSize
                         color: Kirigami.Theme.focusColor
-                        opacity: 0.5
-                        elide: Text.ElideRight
+                        wrapMode: Text.Wrap
                         textFormat: Text.PlainText
+                        readOnly: true
+                        selectByMouse: true
+                        selectionColor: Kirigami.Theme.highlightColor
                     }
                 }
 
-                // Tool use — group member hidden (takes no space when collapsed)
-                Item {
-                    visible: isGroupMember && !groupExpanded
-                    height: 0
-                }
+                // Tool result — shown indented under the actions when expanded
+                ColumnLayout {
+                    visible: lineType === 3 && groupExpanded
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.iconSizes.small + Kirigami.Units.largeSpacing
+                    spacing: 0
 
-                // Tool result — hidden by default (too verbose)
-                Item {
-                    visible: lineType === 3
-                    height: 0
+                    TextEdit {
+                        Layout.fillWidth: true
+                        text: content.length > 4000 ? content.substring(0, 4000) + "\n…" : content
+                        font.family: Kirigami.Theme.fixedWidthFont.family
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        color: Kirigami.Theme.disabledTextColor
+                        wrapMode: Text.Wrap
+                        textFormat: Text.PlainText
+                        readOnly: true
+                        selectByMouse: true
+                        selectionColor: Kirigami.Theme.highlightColor
+                    }
                 }
 
                 // User message — prominent but distinct from agent replies
@@ -246,7 +301,7 @@ QQC2.ScrollView {
                 }
 
                 // Error
-                QQC2.Label {
+                TextEdit {
                     visible: lineType === 5
                     Layout.fillWidth: true
                     Layout.topMargin: 2
@@ -256,8 +311,27 @@ QQC2.ScrollView {
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     color: Kirigami.Theme.negativeTextColor
                     textFormat: Text.PlainText
+                    readOnly: true
+                    selectByMouse: true
+                    selectionColor: Kirigami.Theme.highlightColor
                 }
             }
+        }
+    }
+
+    // Jump-to-bottom affordance when the user has scrolled up during a stream.
+    QQC2.ToolButton {
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: Kirigami.Units.largeSpacing
+        visible: !listView.autoScroll
+        icon.name: "go-bottom-symbolic"
+        Accessible.name: i18n("Scroll to latest output")
+        QQC2.ToolTip.text: i18n("Jump to latest")
+        QQC2.ToolTip.visible: hovered
+        onClicked: {
+            listView.autoScroll = true;
+            listView.positionViewAtEnd();
         }
     }
 }

@@ -30,6 +30,18 @@ Kirigami.Dialog {
         open();
     }
 
+    function createWorkspace() {
+        if (nameField.text.length === 0 || selectedRepo.length === 0) {
+            return;
+        }
+        let branch = branchCombo.currentText || "main";
+        let success = WorktreeManager.createWorkspace(nameField.text, selectedRepo, branch);
+        if (success) {
+            createDialog.accepted();
+            createDialog.close();
+        }
+    }
+
     onOpened: {
         nameField.text = cityNames[Math.floor(Math.random() * cityNames.length)];
         errorMessage = "";
@@ -69,6 +81,8 @@ Kirigami.Dialog {
                 id: nameField
                 Kirigami.FormData.label: i18n("Workspace name:")
                 placeholderText: i18n("e.g., fix-login-bug")
+                Accessible.name: i18n("Workspace name")
+                onAccepted: createDialog.createWorkspace()
             }
 
             QQC2.ComboBox {
@@ -77,6 +91,7 @@ Kirigami.Dialog {
                 Layout.fillWidth: true
                 model: branches
                 enabled: branches.length > 0
+                Accessible.name: i18n("Source branch")
             }
         }
     }
@@ -86,14 +101,7 @@ Kirigami.Dialog {
             text: i18n("Create")
             icon.name: "list-add-symbolic"
             enabled: nameField.text.length > 0 && selectedRepo.length > 0
-            onTriggered: {
-                let branch = branchCombo.currentText || "main";
-                let success = WorktreeManager.createWorkspace(nameField.text, selectedRepo, branch);
-                if (success) {
-                    createDialog.accepted();
-                    createDialog.close();
-                }
-            }
+            onTriggered: createDialog.createWorkspace()
         }
     ]
 }

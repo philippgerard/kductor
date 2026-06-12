@@ -14,17 +14,79 @@ Item {
     property var diffData: []
     property int selectedFileIndex: 0
     property int diffMode: 0  // 0=all, 1=committed, 2=pending
+    property bool loading: false
+    property bool loadError: false
+
+    function tint(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
 
     function reload() {
-        diffData = GitManager.getDetailedDiff(worktreePath, sourceBranch, diffMode);
-        selectedFileIndex = 0;
+        // Remember the file currently under review so an agent-triggered reload
+        // doesn't snap the user back to the first file.
+        let keepPath = (selectedFileIndex < diffData.length) ? diffData[selectedFileIndex].newPath : "";
+        diffPage._keepPath = keepPath;
+        loading = true;
+        loadError = false;
+        GitManager.requestDetailedDiff(worktreePath, sourceBranch, diffMode);
+    }
+    property string _keepPath: ""
+
+    Connections {
+        target: GitManager
+        function onDetailedDiffReady(files, mode, ok) {
+            if (mode !== diffPage.diffMode) return; // a newer request superseded this
+            diffPage.loading = false;
+            diffPage.loadError = !ok;
+            diffPage.diffData = files;
+            // Restore the previously-selected file if it still exists.
+            let idx = 0;
+            if (diffPage._keepPath.length > 0) {
+                for (let i = 0; i < files.length; i++) {
+                    if (files[i].newPath === diffPage._keepPath) { idx = i; break; }
+                }
+            }
+            diffPage.selectedFileIndex = idx;
+        }
     }
 
-    // Empty state (shown below the mode bar)
+    function currentFileDiffText() {
+        if (selectedFileIndex >= diffData.length) return "";
+        let file = diffData[selectedFileIndex];
+        let out = file.newPath + "\n";
+        let hunks = file.hunks || [];
+        for (let h = 0; h < hunks.length; h++) {
+            out += hunks[h].header + "\n";
+            let lines = hunks[h].lines || [];
+            for (let l = 0; l < lines.length; l++) {
+                let p = lines[l].type === "add" ? "+" : lines[l].type === "del" ? "-" : " ";
+                out += p + lines[l].content + "\n";
+            }
+        }
+        return out;
+    }
+
+    // Loading indicator
+    QQC2.BusyIndicator {
+        anchors.centerIn: parent
+        running: diffPage.loading
+        visible: diffPage.loading
+    }
+
+    // Error state
     Kirigami.PlaceholderMessage {
         anchors.centerIn: parent
         anchors.verticalCenterOffset: Kirigami.Units.gridUnit * 2
-        visible: diffData.length === 0
+        visible: !diffPage.loading && diffPage.loadError
+        width: parent.width - Kirigami.Units.largeSpacing * 4
+        icon.name: "dialog-error-symbolic"
+        text: i18n("Could not load the diff")
+        explanation: i18n("The worktree could not be read. It may have been moved or removed.")
+    }
+
+    // Empty state (no changes)
+    Kirigami.PlaceholderMessage {
+        anchors.centerIn: parent
+        anchors.verticalCenterOffset: Kirigami.Units.gridUnit * 2
+        visible: !diffPage.loading && !diffPage.loadError && diffData.length === 0
         width: parent.width - Kirigami.Units.largeSpacing * 4
         icon.name: "vcs-diff"
         text: i18n("No changes")
@@ -36,7 +98,6 @@ Item {
     // Main content
     ColumnLayout {
         anchors.fill: parent
-        visible: diffData.length > 0 || true // always show the mode bar
         spacing: 0
 
         // Mode and file selector bar
@@ -60,24 +121,39 @@ Item {
 
             QQC2.Label {
                 text: i18np("%1 file", "%1 files", diffData.length)
-                opacity: 0.6
+                opacity: 0.7
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
             }
 
             QQC2.ComboBox {
                 id: fileCombo
                 Layout.fillWidth: true
+                Accessible.name: i18n("Changed file")
                 model: {
                     let items = [];
                     for (let i = 0; i < diffData.length; i++) {
                         let f = diffData[i];
-                        let icon = f.status === 1 ? "+" : f.status === 2 ? "−" : f.status === 3 ? "~" : "?";
+                        let icon = (f.status === 1 || f.status === 7) ? "+" : f.status === 2 ? "−" : f.status === 3 ? "~" : "?";
                         items.push(icon + "  " + f.newPath);
                     }
                     return items;
                 }
                 currentIndex: selectedFileIndex
                 onCurrentIndexChanged: selectedFileIndex = currentIndex
+            }
+
+            CopyButton {
+                textToCopy: diffPage.currentFileDiffText()
+                tooltip: i18n("Copy this file's diff")
+                visible: diffData.length > 0
+            }
+
+            QQC2.ToolButton {
+                icon.name: "view-refresh-symbolic"
+                Accessible.name: i18n("Refresh diff")
+                QQC2.ToolTip.text: i18n("Refresh")
+                QQC2.ToolTip.visible: hovered
+                onClicked: reload()
             }
         }
 
@@ -99,7 +175,7 @@ Item {
                 color: {
                     if (selectedFileIndex >= diffData.length) return "transparent";
                     let s = diffData[selectedFileIndex].status;
-                    if (s === 1) return Kirigami.Theme.positiveTextColor;  // Added
+                    if (s === 1 || s === 7) return Kirigami.Theme.positiveTextColor;  // Added/untracked
                     if (s === 2) return Kirigami.Theme.negativeTextColor;  // Deleted
                     return Kirigami.Theme.neutralTextColor;                // Modified etc
                 }
@@ -108,12 +184,12 @@ Item {
             QQC2.Label {
                 text: selectedFileIndex < diffData.length ? diffData[selectedFileIndex].statusLabel : ""
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
-                opacity: 0.6
+                opacity: 0.7
             }
 
             QQC2.Label {
                 text: selectedFileIndex < diffData.length ? diffData[selectedFileIndex].newPath : ""
-                font.family: "monospace"
+                font.family: Kirigami.Theme.fixedWidthFont.family
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                 elide: Text.ElideMiddle
                 Layout.fillWidth: true
@@ -140,7 +216,6 @@ Item {
                     let hunks = file.hunks || [];
                     let allLines = [];
                     for (let h = 0; h < hunks.length; h++) {
-                        // Hunk header
                         allLines.push({
                             isHunkHeader: true,
                             content: hunks[h].header,
@@ -172,11 +247,11 @@ Item {
                     height: lineRow.implicitHeight
                     color: {
                         if (modelData.isHunkHeader)
-                            return Kirigami.Theme.highlightColor.alpha(0.06);
+                            return diffPage.tint(Kirigami.Theme.highlightColor, 0.08);
                         if (modelData.type === "add")
-                            return Qt.rgba(0.0, 0.7, 0.0, 0.08);
+                            return diffPage.tint(Kirigami.Theme.positiveTextColor, 0.12);
                         if (modelData.type === "del")
-                            return Qt.rgba(0.8, 0.0, 0.0, 0.08);
+                            return diffPage.tint(Kirigami.Theme.negativeTextColor, 0.12);
                         return "transparent";
                     }
 
@@ -194,7 +269,7 @@ Item {
                             Layout.topMargin: Kirigami.Units.smallSpacing
                             Layout.bottomMargin: Kirigami.Units.smallSpacing
                             text: modelData.content
-                            font.family: "monospace"
+                            font.family: Kirigami.Theme.fixedWidthFont.family
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
                             color: Kirigami.Theme.disabledTextColor
                         }
@@ -206,9 +281,9 @@ Item {
                             Layout.alignment: Qt.AlignTop
                             horizontalAlignment: Text.AlignRight
                             text: modelData.oldLine
-                            font.family: "monospace"
+                            font.family: Kirigami.Theme.fixedWidthFont.family
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
-                            opacity: 0.35
+                            opacity: 0.5
                             rightPadding: Kirigami.Units.smallSpacing
                         }
 
@@ -218,9 +293,9 @@ Item {
                             Layout.alignment: Qt.AlignTop
                             horizontalAlignment: Text.AlignRight
                             text: modelData.newLine
-                            font.family: "monospace"
+                            font.family: Kirigami.Theme.fixedWidthFont.family
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
-                            opacity: 0.35
+                            opacity: 0.5
                             rightPadding: Kirigami.Units.smallSpacing
                         }
 
@@ -231,7 +306,7 @@ Item {
                             Layout.alignment: Qt.AlignTop
                             horizontalAlignment: Text.AlignHCenter
                             text: modelData.type === "add" ? "+" : modelData.type === "del" ? "−" : " "
-                            font.family: "monospace"
+                            font.family: Kirigami.Theme.fixedWidthFont.family
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
                             font.bold: modelData.type !== "ctx"
                             color: modelData.type === "add" ? Kirigami.Theme.positiveTextColor
@@ -239,20 +314,23 @@ Item {
                                  : Kirigami.Theme.textColor
                         }
 
-                        // Content
-                        QQC2.Label {
+                        // Content (selectable)
+                        TextEdit {
                             visible: !modelData.isHunkHeader
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignTop
                             text: modelData.content
-                            font.family: "monospace"
+                            font.family: Kirigami.Theme.fixedWidthFont.family
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
                             wrapMode: Text.WrapAnywhere
                             textFormat: Text.PlainText
+                            readOnly: true
+                            selectByMouse: true
+                            selectionColor: Kirigami.Theme.highlightColor
                             color: modelData.type === "add" ? Kirigami.Theme.positiveTextColor
                                  : modelData.type === "del" ? Kirigami.Theme.negativeTextColor
                                  : Kirigami.Theme.textColor
-                            opacity: modelData.type === "ctx" ? 0.7 : 1.0
+                            opacity: modelData.type === "ctx" ? 0.8 : 1.0
                         }
                     }
                 }
