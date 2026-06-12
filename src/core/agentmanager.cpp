@@ -8,11 +8,23 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
 
 #include <utility>
+
+// Neutralize Markdown image embeds in untrusted agent text so rich-text
+// rendering can't auto-fetch remote images (tracking / SSRF). The alt text is
+// preserved; the URL is dropped.
+static QString sanitizeAgentMarkdown(const QString &text)
+{
+    static const QRegularExpression imgRe(QStringLiteral("!\\[([^\\]]*)\\]\\([^)]*\\)"));
+    QString out = text;
+    out.replace(imgRe, QStringLiteral("[\\1]"));
+    return out;
+}
 
 AgentManager::AgentManager(QObject *parent)
     : QObject(parent)
@@ -418,8 +430,9 @@ void AgentManager::connectAgent(const QString &agentId, AgentProcess *agent)
     });
 
     connect(agent, &AgentProcess::assistantText, this, [this, agentId, model](const QString &text) {
-        if (model) model->appendText(text);
-        Q_EMIT agentOutput(agentId, 0, text, QString());
+        const QString safe = sanitizeAgentMarkdown(text);
+        if (model) model->appendText(safe);
+        Q_EMIT agentOutput(agentId, 0, safe, QString());
     });
 
     connect(agent, &AgentProcess::thinkingText, this, [this, agentId, model](const QString &text) {

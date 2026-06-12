@@ -34,6 +34,17 @@ Kirigami.Page {
         return i18n("Working…");
     }
 
+    // Only open http(s) URLs externally — a remote-derived URL could otherwise
+    // carry an unexpected scheme.
+    function openWebUrl(url) {
+        if (/^https?:\/\//i.test(url)) {
+            Qt.openUrlExternally(url);
+        } else {
+            applicationWindow().showPassiveNotification(
+                i18n("Refusing to open unexpected URL: %1", url), 4000);
+        }
+    }
+
     // Clipboard helper (QtQuick exposes copy() only through TextEdit).
     TextEdit { id: clipboardHelper; visible: false }
     function copyToClipboard(text, label) {
@@ -318,7 +329,7 @@ Kirigami.Page {
                     }
                     onClicked: {
                         if (prState === "OPEN" && prUrl.length > 0) {
-                            Qt.openUrlExternally(prUrl);
+                            openWebUrl(prUrl);
                         } else {
                             if (forge === "github") guardedOperation("pushPR"); else guardedOperation("pushWeb");
                         }
@@ -611,7 +622,7 @@ Kirigami.Page {
             WorktreeManager.operationFailed.disconnect(onFail);
             // Open web UI to create PR
             let prUrl = webUrl + "/compare/" + sourceBranch + "..." + branchName;
-            Qt.openUrlExternally(prUrl);
+            openWebUrl(prUrl);
         }
         function onFail(op, error) {
             if (op !== "push") return;
