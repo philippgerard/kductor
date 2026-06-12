@@ -16,13 +16,22 @@ Kirigami.Dialog {
     property var branches: []
     property string errorMessage: ""
 
+    readonly property var cityNames: [
+        "lisbon", "kyoto", "oslo", "quito", "nairobi", "vienna", "porto", "havana",
+        "reykjavik", "tallinn", "marrakesh", "osaka", "bergen", "valencia", "bologna",
+        "kigali", "montreal", "helsinki", "dublin", "krakow", "geneva", "antwerp",
+        "cusco", "sapporo", "brisbane", "wellington", "zagreb", "ljubljana", "riga",
+        "vilnius", "oaxaca", "mendoza", "bordeaux", "seville", "palermo", "turin",
+        "ghent", "lucerne", "salzburg", "granada", "kanazawa", "busan", "taipei", "hanoi"
+    ]
+
     function openForRepo(repoPath) {
         selectedRepo = repoPath;
         open();
     }
 
     onOpened: {
-        nameField.text = "";
+        nameField.text = cityNames[Math.floor(Math.random() * cityNames.length)];
         errorMessage = "";
         branches = [];
         if (selectedRepo.length > 0 && GitManager.openRepository(selectedRepo)) {
@@ -35,6 +44,7 @@ Kirigami.Dialog {
             }
         }
         nameField.forceActiveFocus();
+        nameField.selectAll();
     }
 
     Connections {
