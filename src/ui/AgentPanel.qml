@@ -161,11 +161,15 @@ ColumnLayout {
             valueRole: "value"
             implicitWidth: Kirigami.Units.gridUnit * 8
             model: [
+                {label: "Fable 5",    value: "fable"},
                 {label: "Opus 4.6",   value: "opus"},
                 {label: "Sonnet 4.6", value: "sonnet"},
                 {label: "Haiku 4.5",  value: "haiku"}
             ]
-            currentIndex: 0
+            Component.onCompleted: {
+                let idx = model.findIndex(m => m.value === AgentManager.defaultModel);
+                currentIndex = idx >= 0 ? idx : 1;
+            }
         }
 
         QQC2.ToolButton {

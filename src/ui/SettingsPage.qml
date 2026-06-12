@@ -18,7 +18,7 @@ FormCard.FormCardPage {
         FormCard.FormComboBoxDelegate {
             id: defaultModelField
             text: i18n("Default model")
-            model: ["opus", "sonnet", "haiku"]
+            model: ["fable", "opus", "sonnet", "haiku"]
             currentIndex: model.indexOf(AgentManager.defaultModel)
             onCurrentValueChanged: AgentManager.defaultModel = currentValue
         }
